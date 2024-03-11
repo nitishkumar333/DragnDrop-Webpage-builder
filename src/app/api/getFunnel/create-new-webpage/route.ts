@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
-import { NextApiRequest, NextApiResponse } from "next";
+import Request from "next";
 import funnelPage from "@/lib/funnelPage";
 
 export async function POST(req: Request, { params }: any) {
