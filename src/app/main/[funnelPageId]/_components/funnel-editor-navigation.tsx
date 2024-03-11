@@ -14,8 +14,9 @@ import {
   Undo2,
 } from "lucide-react";
 import Link from "next/link";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
 
 type Props = {
   funnelId: string;
@@ -24,7 +25,11 @@ type Props = {
 
 const FunnelEditorNavigation = ({ funnelId, funnelPageDetails }: Props) => {
   const { state, dispatch } = useEditor();
-
+  const { theme, setTheme } = useTheme();
+  const [isChecked, setChecked] = useState(theme === "light" ? false : true);
+  useEffect(() => {
+    setTheme(isChecked === false ? "light" : "dark");
+  }, [isChecked]);
   useEffect(() => {
     dispatch({
       type: "SET_FUNNELPAGE_ID",
@@ -79,13 +84,8 @@ const FunnelEditorNavigation = ({ funnelId, funnelPageDetails }: Props) => {
           <Link href={`/main`}>
             <ArrowLeftCircle />
           </Link>
-          <div className="flex flex-col w-full ">
-            <span className="border-none h-5 m-0 p-0 text-lg">
-              {funnelPageDetails?.name}
-            </span>
-            <span className="text-sm text-muted-foreground">
-              Path: /{funnelPageDetails?.pathName}
-            </span>
+          <div className="w-full">
+            <span className="h-5 text-lg">{funnelPageDetails?.name}</span>
           </div>
         </aside>
         <aside>
@@ -153,13 +153,9 @@ const FunnelEditorNavigation = ({ funnelId, funnelPageDetails }: Props) => {
           </Button>
           <div className="flex flex-col item-center mr-4">
             <div className="flex flex-row items-center gap-4">
-              Draft
-              <Switch disabled defaultChecked={true} />
-              Publish
+              Dark Mode
+              <Switch checked={isChecked} onCheckedChange={setChecked} />
             </div>
-            <span className="text-muted-foreground text-sm">
-              {/* Last updated {funnelPageDetails?.updatedAt?.toLocaleDateString()} */}
-            </span>
           </div>
           <Button onClick={handleOnSave}>Save</Button>
         </aside>
