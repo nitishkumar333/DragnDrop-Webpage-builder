@@ -1,6 +1,5 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import Navbar from "./_components/navbar";
 import Modal from "./_components/modal";
 import Loading from "@/components/global/loading";
 
@@ -20,7 +19,6 @@ const Page = () => {
   }, []);
   return (
     <>
-      <Navbar />
       {loading && (
         <div className="h-full w-full flex justify-center mt-10">
           <Loading />

@@ -67,7 +67,7 @@ const Modal = ({ pages }: Props) => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-8">
         <div
           className={clsx(
-            "bg-white rounded-lg hover:bg-gray-700 cursor-pointer transition-all duration-500 h-60",
+            "rounded-lg hover:bg-gray-700 cursor-pointer transition-all duration-500 h-60 border-dashed border-2 border-primary",
             {
               "pointer-events-none": isOpen,
             }
@@ -87,20 +87,38 @@ const Modal = ({ pages }: Props) => {
           </div>
         </div>
         {pages?.map((page) => {
+          let img: string = "";
+          if (page.id === "2c7df268-e33e-4f64-95e6-f4bbf714ccff")
+            img = "image1.png";
+          else if (page.id === "72092bdc-4f1d-48b9-b79d-b2210226a016")
+            img = "image2.png";
+          else if (page.id === "97c44545-b74a-4dfa-ace6-754d47425488")
+            img = "image3.png";
+          const classess =
+            "rounded-lg h-60 bg-center bg-cover relative border-solid border-2 border-primary";
           return (
-            <div
-              className="bg-white rounded-lg cursor-pointer h-60"
-              key={Math.random()}
-            >
-              <Link href={`/main/${page.id}`}>
-                <div
-                  className={
-                    "grid place-content-center h-full text-gray-600 transition-all duration-500"
-                  }
-                >
-                  <Edit size={50} />
-                </div>
-              </Link>
+            <div className={classess} key={Math.random()}>
+              {img.length > 0 && (
+                <>
+                  <div className="absolute z-[-9] bg-black h-full w-full opacity-60"></div>
+                  <img
+                    src={img}
+                    alt="image"
+                    className="absolute z-[-10] text-white h-full w-full"
+                  />
+                </>
+              )}
+              <div className={"grid place-content-center h-full text-gray-600"}>
+                <Link href={`/main/${page.id}`}>
+                  <div
+                    className={
+                      "bg-primary p-2 rounded-lg hover:scale-110 transition-all duration-300 cursor-pointer"
+                    }
+                  >
+                    <Edit size={35} color={"white"} />
+                  </div>
+                </Link>
+              </div>
             </div>
           );
         })}

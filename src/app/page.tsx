@@ -1,4 +1,3 @@
-// import MaxWidthWrapper from '@/components/MaxWidthWrapper';
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
@@ -7,11 +6,11 @@ import Image from "next/image";
 export default function Home() {
   return (
     <>
-      <div className="mt-16 flex flex-col items-center justify-center text-center">
+      <div className="mt-10 flex flex-col items-center justify-center text-center">
         <h1 className="max-w-4xl text-5xl font-bold md:text-6xl lg:text-7xl">
           Drag, Drop & Create.
         </h1>
-        <p className="mt-5 max-w-prose text-zinc-700 sm:text-lg">
+        <p className="mt-5 max-w-prose text-zinc-300 sm:text-lg">
           Websites that impress, without the stress.
         </p>
 
@@ -20,8 +19,7 @@ export default function Home() {
             size: "lg",
             className: "mt-5",
           })}
-          href="/dashboard"
-          target="_blank"
+          href="/main"
         >
           Get started <ArrowRight className="ml-2 h-5 w-5" />
         </Link>
@@ -41,14 +39,14 @@ export default function Home() {
             />
           </div>
 
-          <div className="mx-auto max-w-6xl px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
             <div
-              className="mt-14
-             flow-root sm:mt-14"
+              className="mt-10
+             flow-root sm:mt-10"
             >
               <div className="rounded-xl bg-gray-900/5 lg:rounded-2xl">
                 <Image
-                  src="https://placehold.co/1920x1080"
+                  src="/images.png"
                   alt="banner"
                   width={1920}
                   height={1080}

@@ -23,7 +23,9 @@ const FunnelEditorSidebar = () => {
     setTab(value);
   };
   useEffect(() => {
-    setTab("Settings");
+    if (state.editor.selectedElement.id.length > 0) {
+      setTab("Settings");
+    }
   }, [state.editor.selectedElement.id]);
   useEffect(() => {
     setSheetOpen(true);
