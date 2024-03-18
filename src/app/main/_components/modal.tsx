@@ -17,16 +17,19 @@ const Modal = ({ pages }: Props) => {
   const router = useRouter();
   const funnelPageId = v4();
   const createHandler = async () => {
-    await fetch("http://localhost:3000/api/getFunnel/create-new-webpage", {
-      method: "POST",
-      body: JSON.stringify({
-        name: input,
-        id: funnelPageId,
-      }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    await fetch(
+      `https://${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/create-new-webpage`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: input,
+          id: funnelPageId,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
     router.push(`/main/${funnelPageId}`);
     toast("Success", {
       description: "Created New Webpage",

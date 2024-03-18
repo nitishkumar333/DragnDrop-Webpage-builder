@@ -6,11 +6,15 @@ import Loading from "@/components/global/loading";
 const Page = () => {
   const [pages, setPage] = useState([]);
   const [loading, setLoading] = useState(true);
+  console.log(process.env.NEXT_PUBLIC_DOMAIN);
   useEffect(() => {
     const getPageIds = async () => {
-      const res = await fetch("http://localhost:3000/api/getFunnel/getAll", {
-        cache: "no-cache",
-      });
+      const res = await fetch(
+        `https://${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/getAll`,
+        {
+          cache: "no-cache",
+        }
+      );
       const pages = await res.json();
       setPage(pages);
       setLoading(false);

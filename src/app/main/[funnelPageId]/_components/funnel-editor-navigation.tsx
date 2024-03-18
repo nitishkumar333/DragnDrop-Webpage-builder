@@ -53,7 +53,7 @@ const FunnelEditorNavigation = ({ funnelId, funnelPageDetails }: Props) => {
   const handleOnSave = async () => {
     try {
       await fetch(
-        `http://localhost:3000/api/getFunnel/${funnelPageDetails.id}`,
+        `https://${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/${funnelPageDetails.id}`,
         {
           method: "POST",
           body: JSON.stringify(state.editor.elements),
