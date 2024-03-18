@@ -7,6 +7,7 @@ const Page = () => {
   const [pages, setPage] = useState([]);
   const [loading, setLoading] = useState(true);
   console.log(process.env.NEXT_PUBLIC_DOMAIN);
+  console.log(process.env.DOMAIN2);
   useEffect(() => {
     const getPageIds = async () => {
       const res = await fetch(
