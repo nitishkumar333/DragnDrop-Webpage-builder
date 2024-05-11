@@ -11,4 +11,4 @@ export async function GET(req: Request, { params }: any) {
   return new NextResponse(JSON.stringify(funnel));
 }
 
-export const fetchCache = 'force-no-store';
+export const revalidate = 0;
