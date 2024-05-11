@@ -10,3 +10,5 @@ export async function GET(req: Request, { params }: any) {
   const funnel = await funnelPage.find({}, "id -_id");
   return new NextResponse(JSON.stringify(funnel));
 }
+
+export const fetchCache = 'force-no-store';

@@ -28,3 +28,5 @@ export async function POST(req: Request, { params }: any) {
   );
   return NextResponse.json({ result: true });
 }
+
+export const fetchCache = 'force-no-store';
