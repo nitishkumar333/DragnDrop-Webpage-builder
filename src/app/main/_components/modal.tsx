@@ -18,7 +18,7 @@ const Modal = ({ pages }: Props) => {
   const funnelPageId = v4();
   const createHandler = async () => {
     await fetch(
-      `https://${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/create-new-webpage`,
+      `${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/create-new-webpage`,
       {
         method: "POST",
         body: JSON.stringify({

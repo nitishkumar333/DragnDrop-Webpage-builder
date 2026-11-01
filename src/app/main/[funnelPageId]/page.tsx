@@ -14,7 +14,7 @@ type Props = {
 
 const Page = async ({ params }: Props) => {
   const result = await fetch(
-    `https://${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/${params.funnelPageId}`,
+    `${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/${params.funnelPageId}`,
     { cache: "no-store" }
   );
   const funnelPageDetails = await result.json();

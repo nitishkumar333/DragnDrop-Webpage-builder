@@ -26,7 +26,7 @@ const FunnelEditor = ({ funnelPageId, liveMode }: Props) => {
   useEffect(() => {
     const fetchData = async () => {
       const result = await fetch(
-        `https://${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/${funnelPageId}`
+        `${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/${funnelPageId}`
       );
       const response = await result.json();
       if (!response) return;
