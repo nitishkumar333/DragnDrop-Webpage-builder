@@ -33,7 +33,7 @@ const ContactForm = ({ title }: Props) => {
   };
 
   return (
-    <Card className="max-w-[500px] w-[500px]">
+    <Card className="w-full max-w-[500px]">
       <CardHeader>
         <CardTitle style={{ textAlign: "center" }}>{title}</CardTitle>
       </CardHeader>

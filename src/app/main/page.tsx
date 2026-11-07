@@ -2,16 +2,15 @@
 import React, { useEffect, useState } from "react";
 import Modal from "./_components/modal";
 import Loading from "@/components/global/loading";
+import { apiUrl } from "@/lib/api";
 
 const Page = () => {
   const [pages, setPage] = useState([]);
   const [loading, setLoading] = useState(true);
-  console.log(process.env.NEXT_PUBLIC_DOMAIN);
-  console.log(process.env.DOMAIN2);
   useEffect(() => {
     const getPageIds = async () => {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/getAll`,
+        apiUrl("/getFunnel/getAll"),
         {
           cache: "no-cache",
         }

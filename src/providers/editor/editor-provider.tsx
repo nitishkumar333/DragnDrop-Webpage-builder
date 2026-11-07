@@ -1,18 +1,39 @@
 "use client";
 import { EditorBtns } from "@/lib/constants";
+import { cloneWithNewIds } from "@/lib/element-factory";
+import {
+  findElement,
+  findParent,
+  insertAfter,
+  insertElement,
+  mapElement,
+  mergeStyles,
+  moveElement,
+  removeElement,
+} from "@/lib/editor-tree";
+import { applyOperations } from "@/lib/ai/operations";
 import { EditorAction } from "./editor-actions";
-import { Dispatch, createContext, useContext, useReducer, useState } from "react";
+import { Dispatch, createContext, useContext, useReducer } from "react";
 
 export type DeviceTypes = "Desktop" | "Mobile" | "Tablet";
+
+export type ElementContent = {
+  href?: string;
+  innerText?: string;
+  src?: string;
+  alt?: string;
+  /** Semantic tag for headings. */
+  level?: "h1" | "h2" | "h3" | "h4";
+  /** Link / button target. */
+  target?: "_self" | "_blank";
+};
 
 export type EditorElement = {
   id: string;
   styles: React.CSSProperties;
   name: string;
   type: EditorBtns;
-  content:
-    | EditorElement[]
-    | { href?: string; innerText?: string; src?: string };
+  content: EditorElement[] | ElementContent;
 };
 
 export type Editor = {
@@ -22,306 +43,260 @@ export type Editor = {
   device: DeviceTypes;
   previewMode: boolean;
   funnelPageId: string;
+  /** Container currently highlighted as the drop target while dragging. */
+  dropTargetId: string | null;
 };
 
 export type HistoryState = {
-  history: Editor[];
+  /** Snapshots of the element tree. */
+  history: EditorElement[][];
   currentIndex: number;
+  /** Key of the last coalescable update, used to merge slider drags etc. */
+  lastKey: string | null;
 };
 
 export type EditorState = {
   editor: Editor;
   history: HistoryState;
+  /** The element tree as last loaded / saved, used for the unsaved indicator. */
+  savedElements: EditorElement[];
 };
 
-const initialEditorState: EditorState["editor"] = {
-  elements: [
-    {
-      content: [],
-      id: "__body",
-      name: "Body",
-      styles: {},
-      type: "__body",
-    },
-  ],
-  selectedElement: {
-    id: "",
+const MAX_HISTORY = 100;
+
+export const emptySelection: EditorElement = {
+  id: "",
+  content: [],
+  name: "",
+  styles: {},
+  type: null,
+};
+
+const initialElements: EditorElement[] = [
+  {
     content: [],
-    name: "",
+    id: "__body",
+    name: "Body",
     styles: {},
-    type: null,
+    type: "__body",
   },
+];
+
+const initialEditorState: Editor = {
+  elements: initialElements,
+  selectedElement: emptySelection,
   device: "Desktop",
   previewMode: false,
   liveMode: false,
   funnelPageId: "",
-};
-
-const initialHistoryState: HistoryState = {
-  history: [initialEditorState],
-  currentIndex: 0,
+  dropTargetId: null,
 };
 
 const initialState: EditorState = {
   editor: initialEditorState,
-  history: initialHistoryState,
+  history: { history: [initialElements], currentIndex: 0, lastKey: null },
+  savedElements: initialElements,
 };
 
-const addAnElement = (
-  editorArray: EditorElement[],
-  action: EditorAction
-): EditorElement[] => {
-  if (action.type !== "ADD_ELEMENT")
-    throw Error(
-      "You sent the wrong action type to the Add Element editor State"
-    );
-  return editorArray.map((item) => {
-    if (item.id === action.payload.containerId && Array.isArray(item.content)) {
-      return {
-        ...item,
-        content: [...item.content, action.payload.elementDetails],
-      };
-    } else if (item.content && Array.isArray(item.content)) {
-      return {
-        ...item,
-        content: addAnElement(item.content, action),
-      };
-    }
-    return item;
-  });
-};
+/** Re-resolve the selected element against a (possibly new) tree. */
+const resolveSelection = (elements: EditorElement[], id: string) =>
+  (id && findElement(elements, id)) || emptySelection;
 
-const appendAnElement = (
-  editorArray: EditorElement[],
-  action: EditorAction
-): EditorElement[] => {
-  if (action.type !== "APPEND_ELEMENT")
-    throw Error(
-      "You sent the wrong action type to the append Element editor State"
-    );
-  function searchAndInsertAdjacent(array: EditorElement[]): EditorElement[] {
-    if (action.type !== "APPEND_ELEMENT")
-      throw Error(
-        "You sent the wrong action type to the Add Element editor State"
-      );
-    return array
-      .map((obj) => {
-        if (obj.id === action.payload.containerId) {
-          return [obj, action.payload.elementDetails];
-        } else if (
-          obj.content &&
-          Array.isArray(obj.content) &&
-          obj.content.length > 0
-        ) {
-          const updatedContent = searchAndInsertAdjacent(obj.content);
-          return { ...obj, content: updatedContent };
-        } else {
-          return obj;
-        }
-      })
-      .flat();
-  }
-  const newData = searchAndInsertAdjacent(editorArray);
-  return newData;
-};
+/**
+ * Apply a new element tree and record it in the undo history.
+ * `select` - id to select afterwards (defaults to keeping the current one).
+ * `key` - when equal to the previous key, replaces the latest history entry.
+ */
+const commit = (
+  state: EditorState,
+  elements: EditorElement[],
+  opts: { select?: string; key?: string | null } = {}
+): EditorState => {
+  if (elements === state.editor.elements) return state;
+  const key = opts.key ?? null;
+  const { history, currentIndex, lastKey } = state.history;
+  const base =
+    key && lastKey === key
+      ? history.slice(0, currentIndex)
+      : history.slice(0, currentIndex + 1);
+  const nextHistory = [...base, elements].slice(-MAX_HISTORY);
 
-const updateAnElement = (
-  editorArray: EditorElement[],
-  action: EditorAction
-): EditorElement[] => {
-  if (action.type !== "UPDATE_ELEMENT") {
-    throw Error("You sent the wrong action type to the update Element State");
-  }
-  return editorArray.map((item) => {
-    if (item.id === action.payload.elementDetails.id) {
-      return { ...item, ...action.payload.elementDetails };
-    } else if (item.content && Array.isArray(item.content)) {
-      return {
-        ...item,
-        content: updateAnElement(item.content, action),
-      };
-    }
-    return item;
-  });
-};
-
-const deleteAnElement = (
-  editorArray: EditorElement[],
-  action: EditorAction
-): EditorElement[] => {
-  if (action.type !== "DELETE_ELEMENT")
-    throw Error(
-      "You sent the wrong action type to the Delete Element editor State"
-    );
-  return editorArray.filter((item) => {
-    if (item.id === action.payload.elementDetails.id) {
-      return false;
-    } else if (item.content && Array.isArray(item.content)) {
-      item.content = deleteAnElement(item.content, action);
-    }
-    return true;
-  });
+  return {
+    ...state,
+    editor: {
+      ...state.editor,
+      elements,
+      selectedElement: resolveSelection(
+        elements,
+        opts.select ?? state.editor.selectedElement.id
+      ),
+    },
+    history: {
+      history: nextHistory,
+      currentIndex: nextHistory.length - 1,
+      lastKey: key,
+    },
+  };
 };
 
 const editorReducer = (
   state: EditorState = initialState,
   action: EditorAction
 ): EditorState => {
+  const { elements } = state.editor;
+
   switch (action.type) {
-    case "ADD_ELEMENT":
-      const updatedEditorState = {
-        ...state.editor,
-        elements: addAnElement(state.editor.elements, action),
-      };
-      // Update the history to include the entire updated EditorState
-      const updatedHistory = [
-        ...state.history.history.slice(0, state.history.currentIndex + 1),
-        { ...updatedEditorState }, // Save a copy of the updated state
-      ];
-
-      const newEditorState = {
-        ...state,
-        editor: updatedEditorState,
-        history: {
-          ...state.history,
-          history: updatedHistory,
-          currentIndex: updatedHistory.length - 1,
-        },
-      };
-
-      return newEditorState;
-
-    case "APPEND_ELEMENT":
-      const updatedEditorStateAfterAppend = {
-        ...state.editor,
-        elements: appendAnElement(state.editor.elements, action),
-      };
-      // Update the history to include the entire updated EditorState
-      const updatedHistoryAfterAppend = [
-        ...state.history.history.slice(0, state.history.currentIndex + 1),
-        { ...updatedEditorStateAfterAppend }, // Save a copy of the updated state
-      ];
-
-      const newEditorStateAfterAppend = {
-        ...state,
-        editor: updatedEditorStateAfterAppend,
-        history: {
-          ...state.history,
-          history: updatedHistoryAfterAppend,
-          currentIndex: updatedHistoryAfterAppend.length - 1,
-        },
-      };
-
-      return newEditorStateAfterAppend;
-
-    case "UPDATE_ELEMENT":
-      // Perform your logic to update the element in the state
-      const updatedElements = updateAnElement(state.editor.elements, action);
-
-      const UpdatedElementIsSelected =
-        state.editor.selectedElement.id === action.payload.elementDetails.id;
-
-      const updatedEditorStateWithUpdate = {
-        ...state.editor,
-        elements: updatedElements,
-        selectedElement: UpdatedElementIsSelected
-          ? action.payload.elementDetails
-          : {
-              id: "",
-              content: [],
-              name: "",
-              styles: {},
-              type: null,
-            },
-      };
-
-      const updatedHistoryWithUpdate = [
-        ...state.history.history.slice(0, state.history.currentIndex + 1),
-        { ...updatedEditorStateWithUpdate }, // Save a copy of the updated state
-      ];
-      const updatedEditor = {
-        ...state,
-        editor: updatedEditorStateWithUpdate,
-        history: {
-          ...state.history,
-          history: updatedHistoryWithUpdate,
-          currentIndex: updatedHistoryWithUpdate.length - 1,
-        },
-      };
-      return updatedEditor;
-
-    case "DELETE_ELEMENT":
-      // Perform your logic to delete the element from the state
-      const updatedElementsAfterDelete = deleteAnElement(
-        state.editor.elements,
-        action
+    case "ADD_ELEMENT": {
+      const { containerId, elementDetails, index } = action.payload;
+      return commit(
+        state,
+        insertElement(elements, containerId, elementDetails, index),
+        { select: elementDetails.id }
       );
-      const updatedEditorStateAfterDelete = {
-        ...state.editor,
-        elements: updatedElementsAfterDelete,
-      };
-      const updatedHistoryAfterDelete = [
-        ...state.history.history.slice(0, state.history.currentIndex + 1),
-        { ...updatedEditorStateAfterDelete }, // Save a copy of the updated state
-      ];
+    }
 
-      const deletedState = {
-        ...state,
-        editor: updatedEditorStateAfterDelete,
-        history: {
-          ...state.history,
-          history: updatedHistoryAfterDelete,
-          currentIndex: updatedHistoryAfterDelete.length - 1,
-        },
-      };
-      return deletedState;
+    case "APPEND_ELEMENT": {
+      const { containerId, elementDetails } = action.payload;
+      return commit(state, insertAfter(elements, containerId, elementDetails), {
+        select: elementDetails.id,
+      });
+    }
 
-    case "CHANGE_CLICKED_ELEMENT":
-      // console.log("gggggggg"+JSON.stringify(action.payload.elementDetails?.id));
-      const clickedState = {
+    case "UPDATE_ELEMENT": {
+      const { elementDetails } = action.payload;
+      return commit(
+        state,
+        mapElement(elements, elementDetails.id, (el) => ({
+          ...el,
+          ...elementDetails,
+        }))
+      );
+    }
+
+    case "UPDATE_ELEMENT_STYLES": {
+      const { elementId, styles, coalesce } = action.payload;
+      const key = coalesce
+        ? `styles:${elementId}:${Object.keys(styles).sort().join(",")}`
+        : null;
+      return commit(
+        state,
+        mapElement(elements, elementId, (el) => ({
+          ...el,
+          styles: mergeStyles(el.styles, styles),
+        })),
+        { key }
+      );
+    }
+
+    case "UPDATE_ELEMENT_CONTENT": {
+      const { elementId, content, coalesce } = action.payload;
+      const key = coalesce
+        ? `content:${elementId}:${Object.keys(content).sort().join(",")}`
+        : null;
+      return commit(
+        state,
+        mapElement(elements, elementId, (el) =>
+          Array.isArray(el.content)
+            ? el
+            : { ...el, content: { ...el.content, ...content } }
+        ),
+        { key }
+      );
+    }
+
+    case "RENAME_ELEMENT": {
+      const { elementId, name } = action.payload;
+      return commit(
+        state,
+        mapElement(elements, elementId, (el) => ({ ...el, name })),
+        { key: `name:${elementId}` }
+      );
+    }
+
+    case "DELETE_ELEMENT": {
+      const { id } = action.payload.elementDetails;
+      if (id === "__body") return state;
+      return commit(state, removeElement(elements, id));
+    }
+
+    case "MOVE_ELEMENT": {
+      const { elementId, containerId, index } = action.payload;
+      return commit(state, moveElement(elements, elementId, containerId, index), {
+        select: elementId,
+      });
+    }
+
+    case "APPLY_OPERATIONS": {
+      const { operations, historyKey } = action.payload;
+      return commit(state, applyOperations(elements, operations), {
+        key: historyKey ?? null,
+      });
+    }
+
+    case "DUPLICATE_ELEMENT": {
+      const original = findElement(elements, action.payload.elementId);
+      if (!original || original.id === "__body") return state;
+      const copy = cloneWithNewIds(original);
+      return commit(state, insertAfter(elements, original.id, copy), {
+        select: copy.id,
+      });
+    }
+
+    case "SHIFT_ELEMENT": {
+      const { elementId, direction } = action.payload;
+      const parent = findParent(elements, elementId);
+      if (!parent || !Array.isArray(parent.content)) return state;
+      const children = [...parent.content];
+      const from = children.findIndex((c) => c.id === elementId);
+      const to = from + direction;
+      if (to < 0 || to >= children.length) return state;
+      [children[from], children[to]] = [children[to], children[from]];
+      return commit(
+        state,
+        mapElement(elements, parent.id, (el) => ({ ...el, content: children }))
+      );
+    }
+
+    case "CHANGE_CLICKED_ELEMENT": {
+      const id = action.payload.elementDetails?.id ?? "";
+      return {
         ...state,
         editor: {
           ...state.editor,
-          selectedElement: action.payload.elementDetails || {
-            id: "",
-            content: [],
-            name: "",
-            styles: {},
-            type: null,
-          },
+          selectedElement: resolveSelection(elements, id),
         },
+        // Selecting an element ends slider/typing coalescing, but an AI run
+        // that is still streaming keeps adding to its single undo step.
         history: {
           ...state.history,
-          history: [
-            ...state.history.history.slice(0, state.history.currentIndex + 1),
-            { ...state.editor }, // Save a copy of the current editor state
-          ],
-          currentIndex: state.history.currentIndex + 1,
+          lastKey: state.history.lastKey?.startsWith("ai:")
+            ? state.history.lastKey
+            : null,
         },
       };
-      return clickedState;
+    }
+
+    case "SET_DROP_TARGET":
+      if (state.editor.dropTargetId === action.payload.id) return state;
+      return {
+        ...state,
+        editor: { ...state.editor, dropTargetId: action.payload.id },
+      };
+
     case "CHANGE_DEVICE":
-      const changedDeviceState = {
+      return {
         ...state,
-        editor: {
-          ...state.editor,
-          device: action.payload.device,
-        },
+        editor: { ...state.editor, device: action.payload.device },
       };
-      return changedDeviceState;
 
     case "TOGGLE_PREVIEW_MODE":
-      const toggleState = {
+      return {
         ...state,
-        editor: {
-          ...state.editor,
-          previewMode: !state.editor.previewMode,
-        },
+        editor: { ...state.editor, previewMode: !state.editor.previewMode },
       };
-      return toggleState;
 
     case "TOGGLE_LIVE_MODE":
-      const toggleLiveMode: EditorState = {
+      return {
         ...state,
         editor: {
           ...state.editor,
@@ -330,83 +305,57 @@ const editorReducer = (
             : !state.editor.liveMode,
         },
       };
-      return toggleLiveMode;
-
-    case "REDO":
-      if (state.history.currentIndex < state.history.history.length - 1) {
-        const nextIndex = state.history.currentIndex + 1;
-        const nextEditorState = { ...state.history.history[nextIndex] };
-        const redoState = {
-          ...state,
-          editor: nextEditorState,
-          history: {
-            ...state.history,
-            currentIndex: nextIndex,
-          },
-        };
-        return redoState;
-      }
-      return state;
 
     case "UNDO":
-      if (state.history.currentIndex > 0) {
-        const prevIndex = state.history.currentIndex - 1;
-        const prevEditorState = { ...state.history.history[prevIndex] };
-        const undoState = {
-          ...state,
-          editor: prevEditorState,
-          history: {
-            ...state.history,
-            currentIndex: prevIndex,
-          },
-        };
-        return undoState;
-      }
-      return state;
-
-    case "LOAD_DATA":
+    case "REDO": {
+      const { history, currentIndex } = state.history;
+      const nextIndex = action.type === "UNDO" ? currentIndex - 1 : currentIndex + 1;
+      if (nextIndex < 0 || nextIndex >= history.length) return state;
+      const restored = history[nextIndex];
       return {
-        ...initialState,
+        ...state,
         editor: {
-          ...initialState.editor,
-          elements: action.payload.elements || initialEditorState.elements,
-          liveMode: !!action.payload.withLive,
+          ...state.editor,
+          elements: restored,
+          selectedElement: resolveSelection(
+            restored,
+            state.editor.selectedElement.id
+          ),
         },
+        history: { ...state.history, currentIndex: nextIndex, lastKey: null },
       };
+    }
+
+    case "LOAD_DATA": {
+      const loaded =
+        Array.isArray(action.payload.elements) && action.payload.elements.length
+          ? action.payload.elements
+          : initialElements;
+      return {
+        editor: {
+          ...initialEditorState,
+          elements: loaded,
+          liveMode: !!action.payload.withLive,
+          funnelPageId: state.editor.funnelPageId,
+          device: state.editor.device,
+        },
+        history: { history: [loaded], currentIndex: 0, lastKey: null },
+        savedElements: loaded,
+      };
+    }
+
+    case "MARK_SAVED":
+      return { ...state, savedElements: state.editor.elements };
 
     case "SET_FUNNELPAGE_ID":
-      const { funnelPageId } = action.payload;
-      const updatedEditorStateWithFunnelPageId = {
-        ...state.editor,
-        funnelPageId,
-      };
-
-      const updatedHistoryWithFunnelPageId = [
-        ...state.history.history.slice(0, state.history.currentIndex + 1),
-        { ...updatedEditorStateWithFunnelPageId }, // Save a copy of the updated state
-      ];
-
-      const funnelPageIdState = {
+      return {
         ...state,
-        editor: updatedEditorStateWithFunnelPageId,
-        history: {
-          ...state.history,
-          history: updatedHistoryWithFunnelPageId,
-          currentIndex: updatedHistoryWithFunnelPageId.length - 1,
-        },
+        editor: { ...state.editor, funnelPageId: action.payload.funnelPageId },
       };
-      return funnelPageIdState;
 
     default:
       return state;
   }
-};
-
-export type EditorContextData = {
-  device: DeviceTypes;
-  previewMode: boolean;
-  setPreviewMode: (previewMode: boolean) => void;
-  setDevice: (device: DeviceTypes) => void;
 };
 
 export const EditorContext = createContext<{
@@ -429,10 +378,6 @@ type EditorProps = {
 
 const EditorProvider = (props: EditorProps) => {
   const [state, dispatch] = useReducer(editorReducer, initialState);
-  // const [tab, setTab] = useState("Components");
-  // const onTabChange = (value: string) => {
-  //   setTab(value);
-  // };
   return (
     <EditorContext.Provider
       value={{

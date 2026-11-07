@@ -1,9 +1,12 @@
-import { v4 } from "uuid";
-import { EditorElement } from "@/providers/editor/editor-provider";
-
+/** Element types that can live in the editor tree. */
 export type EditorBtns =
   | null
   | "text"
+  | "heading"
+  | "button"
+  | "image"
+  | "divider"
+  | "spacer"
   | "container"
   | "section"
   | "contactForm"
@@ -12,9 +15,22 @@ export type EditorBtns =
   | "2Col"
   | "video"
   | "__body"
-  | "image"
   | "navbar"
   | "grid";
+
+/** Pre-designed sections built from the primitive elements above. */
+export type BlockType =
+  | "navbar"
+  | "hero"
+  | "features"
+  | "testimonial"
+  | "pricing"
+  | "cta"
+  | "footer"
+  | "grid";
+
+/** Anything that can be dragged from the sidebar onto the canvas. */
+export type DragPayload = Exclude<EditorBtns, null> | BlockType;
 
 export const defaultStyles: React.CSSProperties = {
   backgroundPosition: "center",
