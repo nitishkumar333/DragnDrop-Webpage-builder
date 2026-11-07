@@ -1,10 +1,11 @@
 import React from "react";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, SettingsIcon } from "lucide-react";
+import { Layers3, Plus, SettingsIcon } from "lucide-react";
 
 const TABS = [
   { value: "Components", title: "Add components", Icon: Plus },
   { value: "Settings", title: "Style", Icon: SettingsIcon },
+  { value: "Layers", title: "Layers", Icon: Layers3 },
 ];
 
 const TabList = () => {

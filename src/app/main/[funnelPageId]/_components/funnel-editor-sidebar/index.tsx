@@ -13,6 +13,7 @@ import React, { useEffect, useRef, useState } from "react";
 import TabList from "./tabs";
 import SettingsTab from "./tabs/settings-tab";
 import ComponentsTab from "./tabs/components-tab";
+import LayersTab from "./tabs/layers-tab";
 
 const FunnelEditorSidebar = () => {
   const { state } = useEditor();
@@ -73,6 +74,10 @@ const FunnelEditorSidebar = () => {
             <TabsContent value="Components" className="mt-0 focus-visible:ring-0">
               {header("Components", "Drag onto the canvas, or click to add.")}
               <ComponentsTab onAdd={() => (suppressSwitch.current = true)} />
+            </TabsContent>
+            <TabsContent value="Layers" className="mt-0">
+              {header("Layers", "The structure of your page. Click to select.")}
+              <LayersTab />
             </TabsContent>
           </div>
         </SheetContent>
