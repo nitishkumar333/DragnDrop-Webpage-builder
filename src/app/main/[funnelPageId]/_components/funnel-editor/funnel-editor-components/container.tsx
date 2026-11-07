@@ -1,592 +1,140 @@
 "use client";
-import { Badge } from "@/components/ui/badge";
-import {
-  EditorBtns,
-  defaultStyles,
-  defaultStylesForText,
-  defaultStylesForContainer,
-} from "@/lib/constants";
+import { createElement } from "@/lib/element-factory";
 import { EditorElement, useEditor } from "@/providers/editor/editor-provider";
 import clsx from "clsx";
-import React, { useState } from "react";
-import { v4 } from "uuid";
+import { MousePointerClick } from "lucide-react";
+import React from "react";
+import ElementToolbar, { QuickAddButton } from "./element-toolbar";
+import { editorOutline } from "./element-wrapper";
 import Recursive from "./recursive";
-import { PlusCircle, Trash } from "lucide-react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import AddOnModal from "../../../../_components/addonModal";
 
 type Props = { element: EditorElement };
 
-const Container = ({ element }: Props) => {
-  const GridDetails: EditorElement = {
-    content: [
-      {
-        content: [],
-        id: v4(),
-        name: "Container",
-        styles: {
-          backgroundPosition: "center",
-          objectFit: "cover",
-          backgroundRepeat: "no-repeat",
-          textAlign: "left",
-          opacity: "100%",
-          paddingTop: "16px",
-          paddingBottom: "16px",
-          paddingLeft: "16px",
-          paddingRight: "16px",
-          marginTop: "0px",
-          marginBottom: "0px",
-          marginLeft: "0px",
-          marginRight: "10px",
-          width: "100%",
-          height: "300px",
-          backgroundImage: "url(https://placehold.co/400x300)",
-        },
-        type: "container",
-      },
-      {
-        content: [],
-        id: v4(),
-        name: "Container",
-        styles: {
-          backgroundPosition: "center",
-          objectFit: "cover",
-          backgroundRepeat: "no-repeat",
-          textAlign: "left",
-          opacity: "100%",
-          paddingTop: "16px",
-          paddingBottom: "16px",
-          paddingLeft: "16px",
-          paddingRight: "16px",
-          marginTop: "0px",
-          marginBottom: "0px",
-          marginLeft: "0px",
-          marginRight: "10px",
-          width: "100%",
-          height: "300px",
-          backgroundImage: "url(https://placehold.co/400x300)",
-        },
-        type: "container",
-      },
-      {
-        content: [],
-        id: v4(),
-        name: "Container",
-        styles: {
-          backgroundPosition: "center",
-          objectFit: "cover",
-          backgroundRepeat: "no-repeat",
-          textAlign: "left",
-          opacity: "100%",
-          paddingTop: "16px",
-          paddingBottom: "16px",
-          paddingLeft: "16px",
-          paddingRight: "16px",
-          marginTop: "0px",
-          marginBottom: "0px",
-          marginLeft: "0px",
-          marginRight: "10px",
-          width: "100%",
-          height: "300px",
-          backgroundImage: "url(https://placehold.co/400x300)",
-        },
-        type: "container",
-      },
-      {
-        content: [],
-        id: v4(),
-        name: "Container",
-        styles: {
-          backgroundPosition: "center",
-          objectFit: "cover",
-          backgroundRepeat: "no-repeat",
-          textAlign: "left",
-          opacity: "100%",
-          paddingTop: "16px",
-          paddingBottom: "16px",
-          paddingLeft: "16px",
-          paddingRight: "16px",
-          marginTop: "0px",
-          marginBottom: "0px",
-          marginLeft: "0px",
-          marginRight: "0px",
-          width: "100%",
-          height: "300px",
-          backgroundImage: "url(https://placehold.co/400x300)",
-        },
-        type: "container",
-      },
-    ],
-    id: v4(),
-    name: "Container",
-    styles: {
-      backgroundPosition: "center",
-      objectFit: "cover",
-      backgroundRepeat: "no-repeat",
-      textAlign: "left",
-      opacity: "100%",
-      paddingTop: "10px",
-      paddingBottom: "10px",
-      paddingLeft: "10px",
-      paddingRight: "10px",
-      marginTop: "16px",
-      marginBottom: "16px",
-      marginLeft: "0px",
-      marginRight: "0px",
-      width: "100%",
-      height: "fit-content",
-      display: "flex",
-    },
-    type: "container",
-  };
-  const NavbarDetails: EditorElement = {
-    content: [
-      {
-        content: { innerText: "YOUR LOGO HERE" },
-        id: v4(),
-        name: "Text",
-        styles: {
-          color: "black",
-          backgroundPosition: "center",
-          objectFit: "cover",
-          backgroundRepeat: "no-repeat",
-          textAlign: "left",
-          opacity: "100%",
-          paddingTop: "2px",
-          paddingBottom: "2px",
-          paddingLeft: "2px",
-          paddingRight: "2px",
-          marginTop: "0px",
-          marginBottom: "0px",
-          marginLeft: "0px",
-          marginRight: "0px",
-          fontSize: "16px",
-          width: "100%",
-          height: "47px",
-          alignItems: "center",
-          display: "flex",
-        },
-        type: "text",
-      },
-      {
-        content: [
-          {
-            content: { innerText: "Home" },
-            id: v4(),
-            name: "Text",
-            styles: {
-              color: "black",
-              backgroundPosition: "center",
-              objectFit: "cover",
-              backgroundRepeat: "no-repeat",
-              textAlign: "center",
-              opacity: "100%",
-              paddingTop: "2px",
-              paddingBottom: "2px",
-              paddingLeft: "2px",
-              paddingRight: "2px",
-              marginTop: "5px",
-              marginBottom: "5px",
-              marginLeft: "0px",
-              marginRight: "0px",
-              fontSize: "16px",
-              width: "100%",
-              height: "auto",
-              display: "block",
-              alignItems: "center",
-            },
-            type: "text",
-          },
-          {
-            content: { innerText: "About" },
-            id: v4(),
-            name: "Text",
-            styles: {
-              color: "black",
-              backgroundPosition: "center",
-              objectFit: "cover",
-              backgroundRepeat: "no-repeat",
-              textAlign: "center",
-              opacity: "100%",
-              paddingTop: "2px",
-              paddingBottom: "2px",
-              paddingLeft: "2px",
-              paddingRight: "2px",
-              marginTop: "5px",
-              marginBottom: "5px",
-              marginLeft: "0px",
-              marginRight: "0px",
-              fontSize: "16px",
-              width: "100%",
-              height: "auto",
-            },
-            type: "text",
-          },
-          {
-            content: { innerText: "Portfolio" },
-            id: v4(),
-            name: "Text",
-            styles: {
-              color: "black",
-              backgroundPosition: "center",
-              objectFit: "cover",
-              backgroundRepeat: "no-repeat",
-              textAlign: "center",
-              opacity: "100%",
-              paddingTop: "2px",
-              paddingBottom: "2px",
-              paddingLeft: "2px",
-              paddingRight: "2px",
-              marginTop: "5px",
-              marginBottom: "5px",
-              marginLeft: "0px",
-              marginRight: "0px",
-              fontSize: "16px",
-              width: "100%",
-              height: "auto",
-            },
-            type: "text",
-          },
-          {
-            content: { innerText: "Contact" },
-            id: v4(),
-            name: "Text",
-            styles: {
-              color: "black",
-              backgroundPosition: "center",
-              objectFit: "cover",
-              backgroundRepeat: "no-repeat",
-              textAlign: "center",
-              opacity: "100%",
-              paddingTop: "2px",
-              paddingBottom: "2px",
-              paddingLeft: "2px",
-              paddingRight: "2px",
-              marginTop: "5px",
-              marginBottom: "5px",
-              marginLeft: "0px",
-              marginRight: "0px",
-              fontSize: "16px",
-              width: "100%",
-              height: "auto",
-            },
-            type: "text",
-          },
-        ],
-        id: v4(),
-        name: "Container",
-        styles: {
-          backgroundPosition: "center",
-          objectFit: "cover",
-          backgroundRepeat: "no-repeat",
-          textAlign: "left",
-          opacity: "100%",
-          paddingTop: "0px",
-          paddingBottom: "0px",
-          paddingLeft: "0px",
-          paddingRight: "0px",
-          marginTop: "0px",
-          marginBottom: "0px",
-          marginLeft: "0px",
-          marginRight: "0px",
-          width: "70%",
-          height: "fit-content",
-          display: "flex",
-          alignItems: "normal",
-        },
-        type: "container",
-      },
-    ],
-    id: v4(),
-    name: "Container",
-    styles: {
-      backgroundPosition: "center",
-      objectFit: "cover",
-      backgroundRepeat: "no-repeat",
-      textAlign: "left",
-      opacity: "100%",
-      paddingTop: "0px",
-      paddingBottom: "0px",
-      paddingLeft: "0px",
-      paddingRight: "0px",
-      marginTop: "16px",
-      marginBottom: "0px",
-      marginLeft: "0px",
-      marginRight: "0px",
-      width: "100%",
-      height: "fit-content",
-      display: "flex",
-    },
-    type: "container",
-  };
-  const { id, content, name, styles, type } = element;
-  const { dispatch, state } = useEditor();
-
-  const [popoverIsOpen, setPopoverIsOpen] = useState<boolean | undefined>(
-    false
+/** Work out where among the container's children the drop should land. */
+const getDropIndex = (e: React.DragEvent<HTMLElement>) => {
+  const container = e.currentTarget;
+  const children = Array.from(container.children).filter(
+    (c): c is HTMLElement => c instanceof HTMLElement && !!c.dataset.elementId
   );
-  const handleOnDrop = (e: React.DragEvent, type: string) => {
+  const computed = window.getComputedStyle(container);
+  const horizontal =
+    computed.display.includes("flex") && computed.flexDirection.startsWith("row");
+
+  for (let i = 0; i < children.length; i++) {
+    const r = children[i].getBoundingClientRect();
+    if (horizontal) {
+      if (e.clientY < r.top) return i;
+      if (e.clientY <= r.bottom && e.clientX < r.left + r.width / 2) return i;
+    } else if (e.clientY < r.top + r.height / 2) {
+      return i;
+    }
+  }
+  return children.length;
+};
+
+const Container = ({ element }: Props) => {
+  const { id, content, type, styles } = element;
+  const { dispatch, state } = useEditor();
+  const { liveMode, device, selectedElement, dropTargetId } = state.editor;
+  const isBody = type === "__body";
+  const isSelected = !liveMode && selectedElement.id === id;
+  const children = Array.isArray(content) ? content : [];
+  const isEmpty = children.length === 0;
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (liveMode) return;
+    e.preventDefault();
     e.stopPropagation();
-    const componentType = e.dataTransfer.getData("componentType") as EditorBtns;
-    setPopoverIsOpen(false);
-    switch (componentType) {
-      case "text":
-        dispatch({
-          type: "ADD_ELEMENT",
-          payload: {
-            containerId: id,
-            elementDetails: {
-              content: { innerText: "Text Element" },
-              id: v4(),
-              name: "Text",
-              styles: {
-                color: "black",
-                ...defaultStyles,
-                ...defaultStylesForText,
-              },
-              type: "text",
-            },
-          },
-        });
-        break;
-      case "link":
-        dispatch({
-          type: "ADD_ELEMENT",
-          payload: {
-            containerId: id,
-            elementDetails: {
-              content: {
-                innerText: "Link Element",
-                href: "#",
-              },
-              id: v4(),
-              name: "Link",
-              styles: {
-                color: "black",
-                ...defaultStyles,
-                ...defaultStylesForText,
-              },
-              type: "link",
-            },
-          },
-        });
-        break;
-      case "video":
-        dispatch({
-          type: "ADD_ELEMENT",
-          payload: {
-            containerId: id,
-            elementDetails: {
-              content: {
-                src: "https://www.youtube.com/embed/9Je_iSH_fEU?si=nfMow0cJHeUhR2E8",
-              },
-              id: v4(),
-              name: "Video",
-              styles: {},
-              type: "video",
-            },
-          },
-        });
-        break;
-      case "container":
-        dispatch({
-          type: "ADD_ELEMENT",
-          payload: {
-            containerId: id,
-            elementDetails: {
-              content: [],
-              id: v4(),
-              name: "Container",
-              styles: { ...defaultStyles, ...defaultStylesForContainer },
-              type: "container",
-            },
-          },
-        });
-        break;
-      case "contactForm":
-        dispatch({
-          type: "ADD_ELEMENT",
-          payload: {
-            containerId: id,
-            elementDetails: {
-              content: [],
-              id: v4(),
-              name: "Contact Form",
-              styles: {},
-              type: "contactForm",
-            },
-          },
-        });
-        break;
-      case "paymentForm":
-        dispatch({
-          type: "ADD_ELEMENT",
-          payload: {
-            containerId: id,
-            elementDetails: {
-              content: [],
-              id: v4(),
-              name: "Contact Form",
-              styles: {},
-              type: "paymentForm",
-            },
-          },
-        });
-        break;
-      case "2Col":
-        dispatch({
-          type: "ADD_ELEMENT",
-          payload: {
-            containerId: id,
-            elementDetails: {
-              content: [
-                {
-                  content: [],
-                  id: v4(),
-                  name: "Container",
-                  styles: { ...defaultStyles, ...defaultStylesForContainer },
-                  type: "container",
-                },
-                {
-                  content: [],
-                  id: v4(),
-                  name: "Container",
-                  styles: { ...defaultStyles, ...defaultStylesForContainer },
-                  type: "container",
-                },
-              ],
-              id: v4(),
-              name: "Two Columns",
-              styles: { ...defaultStyles, display: "flex" },
-              type: "2Col",
-            },
-          },
-        });
-        break;
-      case "navbar":
-        dispatch({
-          type: "ADD_ELEMENT",
-          payload: {
-            containerId: id,
-            elementDetails: NavbarDetails,
-          },
-        });
-        break;
-      case "grid":
-        dispatch({
-          type: "ADD_ELEMENT",
-          payload: {
-            containerId: id,
-            elementDetails: GridDetails,
-          },
-        });
-        break;
+    dispatch({ type: "SET_DROP_TARGET", payload: { id } });
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLElement>) => {
+    if (liveMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dispatch({ type: "SET_DROP_TARGET", payload: { id: null } });
+    const index = getDropIndex(e);
+
+    const movingId = e.dataTransfer.getData("elementId");
+    if (movingId) {
+      dispatch({
+        type: "MOVE_ELEMENT",
+        payload: { elementId: movingId, containerId: id, index },
+      });
+      return;
+    }
+
+    const newElement = createElement(e.dataTransfer.getData("componentType"));
+    if (newElement) {
+      dispatch({
+        type: "ADD_ELEMENT",
+        payload: { containerId: id, elementDetails: newElement, index },
+      });
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDragStart = (e: React.DragEvent, type: string) => {
-    if (type === "__body") return;
-    e.dataTransfer.setData("componentType", type);
-  };
-
-  const handleOnClickBody = (e: React.MouseEvent) => {
+  const handleClick = (e: React.MouseEvent) => {
+    if (liveMode) return;
     e.stopPropagation();
-    dispatch({
-      type: "CHANGE_CLICKED_ELEMENT",
-      payload: {
-        elementDetails: element,
-      },
-    });
-  };
-
-  const handleDeleteElement = () => {
-    dispatch({
-      type: "DELETE_ELEMENT",
-      payload: {
-        elementDetails: element,
-      },
-    });
+    if (!isSelected) {
+      dispatch({
+        type: "CHANGE_CLICKED_ELEMENT",
+        payload: { elementDetails: element },
+      });
+    }
   };
 
   return (
     <div
       style={styles}
-      className={clsx("relative p-4 transition-all group", {
-        "max-w-full w-full": type === "container" || type === "2Col",
-        "h-fit": type === "container",
-        "h-full": type === "__body",
-        "pb-24": type === "__body",
-        "no-scrollbar": type === "__body",
-        "overflow-scroll ": type === "__body",
-        "flex flex-col md:!flex-row": type === "2Col",
-        "!border-blue-500 border-[2px]":
-          state.editor.selectedElement.id === id &&
-          !state.editor.liveMode &&
-          state.editor.selectedElement.type !== "__body",
-        "!border-yellow-400 !border-4":
-          state.editor.selectedElement.id === id &&
-          !state.editor.liveMode &&
-          state.editor.selectedElement.type === "__body",
-        "!border-solid":
-          state.editor.selectedElement.id === id && !state.editor.liveMode,
-        "border-dashed border-[2px] border-slate-400": !state.editor.liveMode,
-      })}
-      onDrop={(e) => handleOnDrop(e, id)}
+      data-element-id={isBody ? undefined : id}
+      onDrop={handleDrop}
       onDragOver={handleDragOver}
-      draggable={type !== "__body"}
-      onClick={handleOnClickBody}
-      onDragStart={(e) => handleDragStart(e, "container")}
+      onClick={handleClick}
+      className={clsx(
+        "relative",
+        editorOutline(liveMode, isSelected && !isBody),
+        {
+          // Body
+          "h-full overflow-y-auto no-scrollbar": isBody,
+          "pb-24 pt-8": isBody && !liveMode,
+          "!outline !outline-[3px] !outline-amber-400": isBody && isSelected,
+          // Two columns stack on small screens
+          flex: type === "2Col",
+          "!flex-col": type === "2Col" && !liveMode && device === "Mobile",
+          "!flex-row": type === "2Col" && !liveMode && device !== "Mobile",
+          "flex-col md:!flex-row": type === "2Col" && liveMode,
+          // Keep empty containers droppable while editing
+          "min-h-[72px]": isEmpty && !liveMode && !isBody,
+          // Drop highlight
+          "after:pointer-events-none after:absolute after:inset-0 after:z-[4] after:bg-blue-500/10 after:outline after:outline-2 after:outline-offset-[-2px] after:outline-blue-500 after:content-['']":
+            !liveMode && dropTargetId === id,
+        }
+      )}
     >
-      <Badge
-        className={clsx(
-          "absolute -top-[23px] -left-[1px] rounded-none rounded-t-lg hidden",
-          {
-            block:
-              state.editor.selectedElement.id === element.id &&
-              !state.editor.liveMode,
-          }
-        )}
-      >
-        {element.name}
-      </Badge>
+      {isSelected && <ElementToolbar element={element} />}
 
-      {state.editor.selectedElement.id === element.id &&
-        !state.editor.liveMode &&
-        state.editor.selectedElement.type !== "__body" && (
-          <Popover open={popoverIsOpen} onOpenChange={setPopoverIsOpen}>
-            <div className="absolute -bottom-[30px] left-1/2 -translate-x-2/4 p-1.5 rounded-full cursor-pointer z-10">
-              <PopoverTrigger>
-                <div className="bg-primary p-1.5 rounded-full">
-                  <PlusCircle size={25} />
-                </div>
-              </PopoverTrigger>
-              <PopoverContent style={{ width: "100%", padding: "0.5rem" }}>
-                <AddOnModal setPopoverIsOpen={setPopoverIsOpen} />
-              </PopoverContent>
-            </div>
-          </Popover>
-        )}
+      {children.map((child) => (
+        <Recursive key={child.id} element={child} />
+      ))}
 
-      {Array.isArray(content) &&
-        content.map((childElement) => (
-          <Recursive key={childElement.id} element={childElement} />
-        ))}
+      {isEmpty && !liveMode && (
+        <div
+          className={clsx(
+            "pointer-events-none flex flex-col items-center justify-center gap-2 text-center text-sm text-slate-400",
+            isBody ? "h-[60vh]" : "h-full min-h-[40px]"
+          )}
+        >
+          {isBody && <MousePointerClick size={32} className="text-slate-300" />}
+          <span>
+            {isBody
+              ? "Drag components or blocks here, or click one in the sidebar"
+              : "Drop elements here"}
+          </span>
+        </div>
+      )}
 
-      {state.editor.selectedElement.id === element.id &&
-        !state.editor.liveMode &&
-        state.editor.selectedElement.type !== "__body" && (
-          <div className="absolute bg-primary px-2.5 py-1 text-xs font-bold -top-[25px] -right-[1px] rounded-none rounded-t-lg cursor-pointer">
-            <Trash size={16} onClick={handleDeleteElement} />
-          </div>
-        )}
+      {isSelected && <QuickAddButton element={element} />}
     </div>
   );
 };
