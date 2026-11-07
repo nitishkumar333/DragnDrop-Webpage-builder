@@ -1,4 +1,16 @@
+import dns from "node:dns";
 import mongoose from "mongoose";
+
+// On some Windows setups Node's resolver only sees 127.0.0.1 (nothing listening),
+// which breaks the SRV lookup required by mongodb+srv:// URIs. Fall back to
+// public resolvers only in that case.
+const dnsServers = dns.getServers();
+if (
+  dnsServers.length > 0 &&
+  dnsServers.every((s) => s === "127.0.0.1" || s === "::1")
+) {
+  dns.setServers(["1.1.1.1", "8.8.8.8"]);
+}
 
 interface MongooseCache {
   conn: typeof mongoose | null;
