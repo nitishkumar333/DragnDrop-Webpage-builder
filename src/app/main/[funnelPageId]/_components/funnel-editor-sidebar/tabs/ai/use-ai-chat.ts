@@ -1,6 +1,6 @@
 "use client";
 import { EditorElement, useEditor } from "@/providers/editor/editor-provider";
-import type { AiChatTurn, AiStreamEvent } from "@/lib/ai/types";
+import type { AiChatTurn, AiProviderInfo, AiStreamEvent } from "@/lib/ai/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 } from "uuid";
 import { apiUrl } from "@/lib/api";
@@ -13,6 +13,8 @@ export type ChatMessage = {
   /** Status lines for each change, shown while the assistant works. */
   steps?: string[];
   changeCount?: number;
+  /** "Claude · claude-opus-5-5", shown under the reply. */
+  modelLabel?: string;
   /** The page right after this run, compared by reference to offer Undo. */
   resultElements?: EditorElement[];
   awaitingCapture?: boolean;
@@ -22,7 +24,17 @@ export type ChatMessage = {
 const STORAGE_PREFIX = "ai-chat:";
 const MAX_STORED = 60;
 
+const PROVIDER_KEY = "ai-provider";
+
 const storageKey = (pageId: string) => `${STORAGE_PREFIX}${pageId}`;
+
+const readStoredProvider = () => {
+  try {
+    return localStorage.getItem(PROVIDER_KEY);
+  } catch {
+    return null;
+  }
+};
 
 const loadMessages = (pageId: string): ChatMessage[] => {
   try {
@@ -44,6 +56,7 @@ const saveMessages = (pageId: string, messages: ChatMessage[]) => {
       steps: m.steps,
       changeCount: m.changeCount,
       reverted: m.reverted,
+      modelLabel: m.modelLabel,
     }));
     localStorage.setItem(storageKey(pageId), JSON.stringify(slim));
   } catch {
@@ -82,6 +95,41 @@ export function useAiChat() {
   stateRef.current = state;
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
+
+  const [providers, setProviders] = useState<AiProviderInfo[]>([]);
+  const [provider, setProviderState] = useState<string | null>(null);
+  const providerRef = useRef(provider);
+  providerRef.current = provider;
+  const providersRef = useRef(providers);
+  providersRef.current = providers;
+
+  // Which AI providers the backend has keys for.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl("/ai/providers"))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { default: string | null; providers: AiProviderInfo[] } | null) => {
+        if (cancelled || !data) return;
+        setProviders(data.providers);
+        const stored = readStoredProvider();
+        const usable = (id: string | null) =>
+          !!id && data.providers.some((p) => p.id === id && p.configured);
+        setProviderState(usable(stored) ? stored : data.default);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const setProvider = useCallback((id: string) => {
+    setProviderState(id);
+    try {
+      localStorage.setItem(PROVIDER_KEY, id);
+    } catch {
+      // Not remembered; still used for this session.
+    }
+  }, []);
 
   const pageId = state.editor.funnelPageId;
   const loadedFor = useRef<string | null>(null);
@@ -152,8 +200,10 @@ export function useAiChat() {
           }
         } else if (event.type === "done") {
           finished = true;
+          const label = providersRef.current.find((p) => p.id === event.provider)?.label;
           updateMessage(replyId, (m) => ({
             ...m,
+            modelLabel: event.model ? [label, event.model].filter(Boolean).join(" · ") : undefined,
             content: event.message,
             status: "done",
             changeCount: applied,
@@ -181,6 +231,7 @@ export function useAiChat() {
             elements: editor.elements,
             selectedId: editor.selectedElement.id || null,
             device: editor.device,
+            provider: providerRef.current || undefined,
           }),
           signal: controller.signal,
         });
@@ -247,6 +298,9 @@ export function useAiChat() {
   return {
     messages,
     busy,
+    providers,
+    provider,
+    setProvider,
     send,
     stop,
     undo,

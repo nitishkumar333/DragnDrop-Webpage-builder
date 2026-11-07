@@ -3,9 +3,11 @@
 from ...config import env
 from .anthropic_provider import AnthropicProvider
 from .base import ChatTurn, Provider, ProviderError
+from .gemini_provider import GeminiProvider
+from .openai_compatible import DeepSeekProvider, GroqProvider
 
 PROVIDERS: dict[str, Provider] = {
-    p.id: p for p in (AnthropicProvider(),)
+    p.id: p for p in (AnthropicProvider(), GeminiProvider(), DeepSeekProvider(), GroqProvider())
 }
 
 

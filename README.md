@@ -38,22 +38,40 @@ Other scripts:
 
 ## AI assistant
 
-The editor sidebar has an **AI assistant** tab (sparkles icon). Users describe a change in plain language and the assistant edits the page directly. Changes appear on the canvas as they are made, and each request is a single undo step.
+The editor sidebar has an **AI assistant** tab (sparkles icon). Users describe a change in plain language and the assistant edits the page directly. Changes appear on the canvas as they are made, and each request is a single undo step. A menu in the tab picks the AI provider.
 
-Add your Claude API key to `.env` and restart `npm run dev`:
+Add a key for at least one provider to `.env` and restart `npm run dev`:
 
 ```bash
-ANTHROPIC_API_KEY=...             # https://platform.claude.com
-ANTHROPIC_MODEL=claude-opus-5-5   # optional; e.g. claude-sonnet-5-5 is faster and cheaper
-ANTHROPIC_EFFORT=medium           # optional; low | medium | high
+ANTHROPIC_API_KEY=...   # Claude      https://platform.claude.com
+GEMINI_API_KEY=...      # Gemini      https://aistudio.google.com/apikey
+DEEPSEEK_API_KEY=...    # DeepSeek    https://platform.deepseek.com
+GROQ_API_KEY=...        # Groq        https://console.groq.com/keys
+
+AI_PROVIDER=anthropic   # optional default; otherwise the first provider with a key
+```
+
+Optional model overrides (defaults shown):
+
+```bash
+ANTHROPIC_MODEL=claude-opus-5-5        # e.g. claude-sonnet-5-5 is faster and cheaper
+ANTHROPIC_EFFORT=medium                # low | medium | high
+GEMINI_MODEL=gemini-flash-latest       # Google's alias for the current Flash model
+DEEPSEEK_MODEL=deepseek-v4-flash
+GROQ_MODEL=openai/gpt-oss-120b
 ```
 
 How it works:
 
-1. The chat (`src/app/main/[funnelPageId]/_components/funnel-editor-sidebar/tabs/ai/`) sends `POST /api/ai`. The request contains the current page, the selected element and recent chat turns.
+1. The chat (`src/app/main/[funnelPageId]/_components/funnel-editor-sidebar/tabs/ai/`) sends `POST /api/ai`. The request contains the current page, the selected element, recent chat turns and the chosen provider.
 2. `backend/app/ai/agent.py` runs a tool loop. The model reads a compact outline of the page (`page_session.py`) and calls the tools in `tools.py`: `add_block`, `add_element`, `update_styles`, `update_content`, `delete_elements`, `move_element`, `duplicate_element`. Every call is validated and sanitized. Errors go back to the model so it can correct itself.
 3. Each change becomes an operation that streams back as newline-delimited JSON. The editor applies it with the same logic the backend used (`src/lib/ai/operations.ts` ↔ `backend/app/ai/operations.py`). `backend/tests/test_ts_parity.py` checks that both produce identical pages.
-4. The model is called through a provider adapter (`backend/app/ai/providers/`). Claude uses the Anthropic SDK. To add a provider, implement `Provider` and `Conversation` from `providers/base.py` and register the class in `providers/__init__.py`.
+4. Provider adapters are in `backend/app/ai/providers/`:
+   - Claude uses the Anthropic SDK.
+   - Gemini uses the google-genai SDK.
+   - DeepSeek and Groq use their OpenAI-compatible APIs.
+
+   To add a provider, implement `Provider` and `Conversation` from `providers/base.py` and register the class in `providers/__init__.py`.
 
 The API has no authentication, only a basic per-IP rate limit on `/api/ai` (20 requests per minute per process). Add auth before deploying publicly, because every AI request uses your API credit.
 
@@ -80,4 +98,4 @@ Deploy the frontend (for example on Vercel) and set `BACKEND_URL` to the backend
 cd backend && pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-Give the backend the same `MONGODB_URI` and `ANTHROPIC_API_KEY`. If browsers will call the backend directly instead of through Next.js, also set `CORS_ORIGINS`.
+Give the backend the same `MONGODB_URI` and AI keys. If browsers will call the backend directly instead of through Next.js, also set `CORS_ORIGINS`.

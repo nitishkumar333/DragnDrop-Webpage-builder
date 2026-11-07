@@ -113,13 +113,15 @@ def test_validation(client):
 def test_not_configured(client):
     response = client.post("/api/ai", json={"prompt": "x", "elements": PAGE})
     assert response.status_code == 503 and "API key" in response.json()["error"]
-    response = client.post("/api/ai", json={"prompt": "x", "elements": PAGE, "provider": "anthropic"})
-    assert response.status_code == 503 and "ANTHROPIC_API_KEY" in response.json()["error"]
+    response = client.post("/api/ai", json={"prompt": "x", "elements": PAGE, "provider": "groq"})
+    assert response.status_code == 503 and "GROQ_API_KEY" in response.json()["error"]
 
 
 def test_providers_endpoint(client, monkeypatch):
-    assert client.get("/api/ai/providers").json()["default"] is None
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+    monkeypatch.setenv("GROQ_API_KEY", "k")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
     data = client.get("/api/ai/providers").json()
-    assert data["default"] == "anthropic"
-    assert data["providers"] == [{"id": "anthropic", "label": "Claude", "model": "claude-opus-5-5", "configured": True}]
+    assert data["default"] == "deepseek"  # first configured, in registry order
+    assert {p["id"]: p["configured"] for p in data["providers"]} == {"anthropic": False, "gemini": False, "deepseek": True, "groq": True}
+    monkeypatch.setenv("AI_PROVIDER", "groq")
+    assert client.get("/api/ai/providers").json()["default"] == "groq"

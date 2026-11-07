@@ -115,8 +115,8 @@ async def ai(request: Request):
             return _error(503, f"{p.label} is not configured. Add {p.api_key_env} to your .env file and restart the backend.")
         return _error(
             503,
-            "The AI assistant is not configured. Add your Claude API key (ANTHROPIC_API_KEY) to "
-            "your .env file and restart the backend.",
+            "The AI assistant is not configured. Add an API key (ANTHROPIC_API_KEY, GEMINI_API_KEY, "
+            "DEEPSEEK_API_KEY or GROQ_API_KEY) to your .env file and restart the backend.",
         )
 
     # Earlier chat turns as plain text; the page outline only goes with the latest

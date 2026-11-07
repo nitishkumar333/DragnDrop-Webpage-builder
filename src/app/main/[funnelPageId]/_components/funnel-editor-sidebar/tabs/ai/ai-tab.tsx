@@ -1,5 +1,12 @@
 "use client";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useEditor } from "@/providers/editor/editor-provider";
 import clsx from "clsx";
@@ -68,12 +75,16 @@ const AssistantMessage = ({ message, chat }: { message: ChatMessage; chat: AiCha
           {message.content}
         </p>
       )}
+      {!working && message.modelLabel && (message.changeCount ?? 0) === 0 && (
+        <p className="text-[11px] text-muted-foreground">{message.modelLabel}</p>
+      )}
       {!working && (message.changeCount ?? 0) > 0 && (
         <div className="flex items-center justify-between gap-2 border-t pt-2 text-xs text-muted-foreground">
           <span>
             {message.reverted
               ? "Changes undone"
               : `${message.changeCount} change${message.changeCount === 1 ? "" : "s"} applied`}
+            {message.modelLabel && <span className="block text-[11px]">{message.modelLabel}</span>}
           </span>
           {chat.canUndo(message) && (
             <Button
@@ -121,7 +132,7 @@ const AiTab = ({ chat }: Props) => {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-start justify-between gap-2 px-6 pb-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
             <Sparkles className="h-4 w-4 text-violet-500" />
             AI assistant
@@ -129,6 +140,27 @@ const AiTab = ({ chat }: Props) => {
           <p className="text-sm text-muted-foreground">
             Describe a change and watch it happen.
           </p>
+          {chat.providers.length > 0 && (
+            <Select
+              value={chat.provider ?? undefined}
+              onValueChange={chat.setProvider}
+              disabled={chat.busy}
+            >
+              <SelectTrigger className="mt-2 h-8 w-full text-xs" title="AI model">
+                <SelectValue placeholder="No AI provider configured" />
+              </SelectTrigger>
+              <SelectContent className="z-[100]">
+                {chat.providers.map((p) => (
+                  <SelectItem key={p.id} value={p.id} disabled={!p.configured} className="text-xs">
+                    {p.label}
+                    <span className="ml-1 text-muted-foreground">
+                      {p.configured ? p.model : "(no API key)"}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         {chat.messages.length > 0 && (
           <Button
