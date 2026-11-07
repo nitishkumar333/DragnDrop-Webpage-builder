@@ -11,6 +11,7 @@ import {
   moveElement,
   removeElement,
 } from "@/lib/editor-tree";
+import { applyOperations } from "@/lib/ai/operations";
 import { EditorAction } from "./editor-actions";
 import { Dispatch, createContext, useContext, useReducer } from "react";
 
@@ -225,6 +226,13 @@ const editorReducer = (
       });
     }
 
+    case "APPLY_OPERATIONS": {
+      const { operations, historyKey } = action.payload;
+      return commit(state, applyOperations(elements, operations), {
+        key: historyKey ?? null,
+      });
+    }
+
     case "DUPLICATE_ELEMENT": {
       const original = findElement(elements, action.payload.elementId);
       if (!original || original.id === "__body") return state;
@@ -257,7 +265,14 @@ const editorReducer = (
           ...state.editor,
           selectedElement: resolveSelection(elements, id),
         },
-        history: { ...state.history, lastKey: null },
+        // Selecting an element ends slider/typing coalescing, but an AI run
+        // that is still streaming keeps adding to its single undo step.
+        history: {
+          ...state.history,
+          lastKey: state.history.lastKey?.startsWith("ai:")
+            ? state.history.lastKey
+            : null,
+        },
       };
     }
 

@@ -1,3 +1,4 @@
+import type { EditorOperation } from "@/lib/ai/operations";
 import {
   DeviceTypes,
   EditorElement,
@@ -70,6 +71,14 @@ export type EditorAction =
   | {
       type: "MOVE_ELEMENT";
       payload: { elementId: string; containerId: string; index?: number };
+    }
+  | {
+      /**
+       * Apply a batch of operations (from the AI assistant). Batches sent with
+       * the same `historyKey` in a row share one undo step.
+       */
+      type: "APPLY_OPERATIONS";
+      payload: { operations: EditorOperation[]; historyKey?: string };
     }
   | {
       type: "DUPLICATE_ELEMENT";

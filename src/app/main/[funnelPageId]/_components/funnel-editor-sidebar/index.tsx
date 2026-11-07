@@ -14,6 +14,8 @@ import TabList from "./tabs";
 import SettingsTab from "./tabs/settings-tab";
 import ComponentsTab from "./tabs/components-tab";
 import LayersTab from "./tabs/layers-tab";
+import AiTab from "./tabs/ai/ai-tab";
+import { useAiChat } from "./tabs/ai/use-ai-chat";
 
 const FunnelEditorSidebar = () => {
   const { state } = useEditor();
@@ -22,6 +24,9 @@ const FunnelEditorSidebar = () => {
   // Elements added from the Components tab get selected; don't yank the user
   // away from the tab they're adding from.
   const suppressSwitch = useRef(false);
+  // Lives here (not in the tab) so a running request and the conversation
+  // survive switching tabs.
+  const aiChat = useAiChat();
 
   useEffect(() => {
     if (suppressSwitch.current) {
@@ -66,7 +71,17 @@ const FunnelEditorSidebar = () => {
             { hidden: state.editor.previewMode }
           )}
         >
-          <div className="no-scrollbar h-full overflow-y-auto pb-36 pt-6">
+          <TabsContent
+            value="AI"
+            className="mt-0 h-[calc(100vh-97px)] pt-6 focus-visible:ring-0"
+          >
+            <AiTab chat={aiChat} />
+          </TabsContent>
+          <div
+            className={clsx("no-scrollbar h-full overflow-y-auto pb-36 pt-6", {
+              hidden: tab === "AI",
+            })}
+          >
             <TabsContent value="Settings" className="mt-0">
               {header("Styles", "Fine-tune content, typography, colors and layout.")}
               <SettingsTab />
