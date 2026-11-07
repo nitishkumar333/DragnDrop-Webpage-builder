@@ -5,7 +5,9 @@ import funnelPage from "@/lib/funnelPage";
 
 export async function GET(req: Request, { params }: any) {
   await dbConnect();
-  const funnel = await funnelPage.find({}, "id -_id");
+  const funnel = await funnelPage
+    .find({}, "id name updatedAt -_id")
+    .sort({ updatedAt: -1 });
   return new NextResponse(JSON.stringify(funnel));
 }
 

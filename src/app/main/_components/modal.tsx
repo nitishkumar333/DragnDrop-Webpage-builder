@@ -8,7 +8,7 @@ import { Edit, Plus } from "lucide-react";
 import clsx from "clsx";
 
 type Props = {
-  pages: { id: string }[];
+  pages: { id: string; name?: string }[];
 };
 
 const Modal = ({ pages }: Props) => {
@@ -100,7 +100,7 @@ const Modal = ({ pages }: Props) => {
           const classess =
             "rounded-lg h-60 bg-center bg-cover relative border-solid border-2 border-primary";
           return (
-            <div className={classess} key={Math.random()}>
+            <div className={classess} key={page.id}>
               {img.length > 0 && (
                 <>
                   <div className="absolute z-[-9] bg-black h-full w-full opacity-60"></div>
@@ -111,6 +111,9 @@ const Modal = ({ pages }: Props) => {
                   />
                 </>
               )}
+              <span className="absolute bottom-0 left-0 right-0 truncate rounded-b-md bg-black/60 px-3 py-2 text-sm text-white">
+                {page.name || "Untitled page"}
+              </span>
               <div className={"grid place-content-center h-full text-gray-600"}>
                 <Link href={`/main/${page.id}`}>
                   <div
