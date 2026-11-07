@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "next dev",
+    "dev:api": "node scripts/backend-python.mjs -m uvicorn app.main:app --reload --reload-dir app --port 8000",
+    "setup:backend": "node scripts/setup-backend.mjs",
+    "test:backend": "node scripts/export-element-templates.mjs --check && node scripts/backend-python.mjs -m pytest -q",
+    "export:templates": "node scripts/export-element-templates.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.6.0",
     "@hookform/resolvers": "^3.3.4",
     "@radix-ui/react-accordion": "^1.1.2",
     "@radix-ui/react-hover-card": "^1.0.7",
@@ -23,7 +27,6 @@
     "cmdk": "^0.2.1",
     "init": "^0.1.2",
     "lucide-react": "^0.331.0",
-    "mongoose": "^8.1.2",
     "next": "14.1.0",
     "next-themes": "^0.2.1",
     "react": "^18",

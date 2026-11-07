@@ -1,7 +1,6 @@
 import EditorProvider from "@/providers/editor/editor-provider";
 import FunnelEditor from "@/app/main/[funnelPageId]/_components/funnel-editor";
-import dbConnect from "@/lib/dbConnect";
-import funnelPage from "@/lib/funnelPage";
+import { apiUrl } from "@/lib/api";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import React, { cache } from "react";
@@ -10,12 +9,15 @@ type Props = { params: { funnelPageId: string } };
 
 export const dynamic = "force-dynamic";
 
-/** Load the saved page straight from the database (deduped per request). */
-const getPage = cache(async (id: string) => {
-  await dbConnect();
-  const page = await funnelPage
-    .findOne({ id }, "id name content -_id")
-    .lean<{ id: string; name: string; content: string | null }>();
+type SavedPage = { id: string; name: string; content: string | null };
+
+/** Load the saved page from the backend (deduped per request). */
+const getPage = cache(async (id: string): Promise<SavedPage | null> => {
+  const res = await fetch(apiUrl(`/getFunnel/${encodeURIComponent(id)}`), {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Failed to load page ${id} (${res.status})`);
+  const page = await res.json();
   return page ? { id: page.id, name: page.name, content: page.content } : null;
 });
 

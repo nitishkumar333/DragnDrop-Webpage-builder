@@ -1,5 +1,6 @@
 "use client";
 import { Button } from "@/components/ui/button";
+import { apiUrl } from "@/lib/api";
 import { FONT_OPTIONS, googleFamilyFor, googleFontsHref } from "@/lib/design-tokens";
 import { walkElements } from "@/lib/editor-tree";
 import { EditorElement, useEditor } from "@/providers/editor/editor-provider";
@@ -61,7 +62,7 @@ const FunnelEditor = ({ funnelPageId, liveMode }: Props) => {
 
     const fetchData = async () => {
       const result = await fetch(
-        `${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/${funnelPageId}`
+        apiUrl(`/getFunnel/${funnelPageId}`)
       );
       const response = await result.json();
       if (response) load(response.content);

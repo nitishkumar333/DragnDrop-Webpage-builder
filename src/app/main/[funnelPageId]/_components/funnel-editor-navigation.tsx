@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { apiUrl } from "@/lib/api";
 import { useTheme } from "next-themes";
 
 type Props = {
@@ -63,7 +64,7 @@ const FunnelEditorNavigation = ({ funnelPageDetails }: Props) => {
     setSaving(true);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/${funnelPageDetails.id}`,
+        apiUrl(`/getFunnel/${funnelPageDetails.id}`),
         {
           method: "POST",
           body: JSON.stringify(state.editor.elements),

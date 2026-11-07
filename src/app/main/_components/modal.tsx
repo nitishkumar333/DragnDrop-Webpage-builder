@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { v4 } from "uuid";
 import { Edit, Plus } from "lucide-react";
 import clsx from "clsx";
+import { apiUrl } from "@/lib/api";
 
 type Props = {
   pages: { id: string; name?: string }[];
@@ -18,7 +19,7 @@ const Modal = ({ pages }: Props) => {
   const funnelPageId = v4();
   const createHandler = async () => {
     await fetch(
-      `${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/create-new-webpage`,
+      apiUrl("/getFunnel/create-new-webpage"),
       {
         method: "POST",
         body: JSON.stringify({

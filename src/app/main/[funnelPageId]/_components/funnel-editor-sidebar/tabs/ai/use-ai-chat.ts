@@ -3,6 +3,7 @@ import { EditorElement, useEditor } from "@/providers/editor/editor-provider";
 import type { AiChatTurn, AiStreamEvent } from "@/lib/ai/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 } from "uuid";
+import { apiUrl } from "@/lib/api";
 
 export type ChatMessage = {
   id: string;
@@ -171,7 +172,7 @@ export function useAiChat() {
       };
 
       try {
-        const res = await fetch("/api/ai", {
+        const res = await fetch(apiUrl("/ai"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

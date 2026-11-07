@@ -4,6 +4,7 @@ import FunnelEditorNavigation from "./_components/funnel-editor-navigation";
 import FunnelEditorSidebar from "./_components/funnel-editor-sidebar";
 import FunnelEditor from "./_components/funnel-editor";
 import { redirect } from "next/navigation";
+import { apiUrl } from "@/lib/api";
 
 type Props = {
   params: {
@@ -14,7 +15,7 @@ type Props = {
 
 const Page = async ({ params }: Props) => {
   const result = await fetch(
-    `${process.env.NEXT_PUBLIC_DOMAIN}/api/getFunnel/${params.funnelPageId}`,
+    apiUrl(`/getFunnel/${params.funnelPageId}`),
     { cache: "no-store" }
   );
   const funnelPageDetails = await result.json();
