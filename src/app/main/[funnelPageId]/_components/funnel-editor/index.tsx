@@ -107,6 +107,7 @@ const FunnelEditor = ({ funnelPageId, liveMode }: Props) => {
     <div
       data-canvas-root
       data-building={editor.building || undefined}
+      data-live={editor.liveMode || undefined}
       onClickCapture={blockWhileBuilding}
       onDragOverCapture={blockWhileBuilding}
       onDropCapture={blockWhileBuilding}
