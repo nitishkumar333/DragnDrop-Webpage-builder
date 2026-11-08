@@ -15,8 +15,12 @@ export type AiStreamEvent =
       /** Which provider and model produced the reply. */
       provider?: string;
       model?: string;
+      /** Photographers of the stock photos this run put on the page. */
+      photoCredits?: AiPhotoCredit[];
     }
   | { type: "error"; message: string };
+
+export type AiPhotoCredit = { name: string; url: string };
 
 export type AiChatTurn = { role: "user" | "assistant"; content: string };
 

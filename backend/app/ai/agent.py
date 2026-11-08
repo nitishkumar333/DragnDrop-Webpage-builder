@@ -8,7 +8,7 @@ from .page_session import PageSession
 from .prompt import SYSTEM_PROMPT
 from .providers import ChatTurn, Provider, ProviderError
 from .providers.base import ToolResult
-from .tools import TOOLS, execute_tool
+from .tools import TOOLS, run_tool
 
 MAX_TURNS = 12
 MAX_OPERATIONS = 400
@@ -81,7 +81,7 @@ async def run_agent(
                     )
                     continue
                 start = len(session.operations)
-                outcome = execute_tool(session, call.name, call.arguments)
+                outcome = await run_tool(session, call.name, call.arguments)
                 results.append(ToolResult(call, outcome.result, outcome.is_error))
                 if outcome.operation_count > 0:
                     event: dict[str, Any] = {
@@ -102,10 +102,14 @@ async def run_agent(
         yield {"type": "error", "message": str(error)}
         return
 
-    yield {
+    done: dict[str, Any] = {
         "type": "done",
         "message": reply or "Done.",
         "changeCount": len(session.operations),
         "provider": provider.id,
         "model": provider.model(),
     }
+    credits = session.photo_credits()
+    if credits:
+        done["photoCredits"] = credits
+    yield done

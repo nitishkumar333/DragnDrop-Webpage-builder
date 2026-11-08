@@ -1,6 +1,6 @@
 "use client";
 import { EditorElement, useEditor } from "@/providers/editor/editor-provider";
-import type { AiChatTurn, AiProviderInfo, AiStreamEvent } from "@/lib/ai/types";
+import type { AiChatTurn, AiPhotoCredit, AiProviderInfo, AiStreamEvent } from "@/lib/ai/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 } from "uuid";
 import { apiUrl } from "@/lib/api";
@@ -16,6 +16,7 @@ export type ChatMessage = {
   changeCount?: number;
   /** "Claude · claude-opus-5-5", shown under the reply. */
   modelLabel?: string;
+  photoCredits?: AiPhotoCredit[];
   /** The page right after this run, compared by reference to offer Undo. */
   resultElements?: EditorElement[];
   awaitingCapture?: boolean;
@@ -58,6 +59,7 @@ const saveMessages = (pageId: string, messages: ChatMessage[]) => {
       changeCount: m.changeCount,
       reverted: m.reverted,
       modelLabel: m.modelLabel,
+      photoCredits: m.photoCredits,
     }));
     localStorage.setItem(storageKey(pageId), JSON.stringify(slim));
   } catch {
@@ -205,6 +207,7 @@ export function useAiChat({ onAutoStart }: { onAutoStart?: () => void } = {}) {
           updateMessage(replyId, (m) => ({
             ...m,
             modelLabel: event.model ? [label, event.model].filter(Boolean).join(" · ") : undefined,
+            photoCredits: event.photoCredits,
             content: event.message,
             status: "done",
             changeCount: applied,

@@ -4,6 +4,7 @@ The definitions are plain JSON Schema shared by every provider; each provider
 adapts them to its own format.
 """
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
-from . import sections, templates
+from . import photos, sections, templates
 from .design import CORNERS, font_value, infer_design, is_hex, make_design, normalize_hex
 from .operations import find_element, find_parent, merge_styles, operation, top_level_ancestor
 from .page_session import PageSession
@@ -188,7 +189,7 @@ TOOLS: list[ToolDefinition] = [
                 "secondary_href": {"type": "string"},
                 "image": {
                     "type": "string",
-                    "description": "What the image should show (becomes a labeled placeholder), or an https URL the user gave you. Used by hero and split.",
+                    "description": 'A short description of the photo, used as a stock photo search ("barista pouring latte art"), or an https URL the user gave you. Used by hero and split.',
                 },
                 "items": {"type": "array", "items": _SECTION_ITEM},
             },
@@ -278,6 +279,19 @@ TOOLS: list[ToolDefinition] = [
         "Copy an element (with its children) and insert the copy right after the original. "
         "Returns the copy's ids.",
         _object({"id": {"type": "string", "description": _ID}}, ["id"]),
+    ),
+    ToolDefinition(
+        "find_photos",
+        "Search stock photos, to replace an existing image or add a new one. Returns photo URLs "
+        "to use with update_content's src field. add_section finds photos by itself, so this "
+        "isn't needed for new sections.",
+        _object(
+            {
+                "query": {"type": "string", "description": 'What the photo shows, in a few plain words, e.g. "barista pouring latte art".'},
+                "orientation": {"type": "string", "enum": ["landscape", "portrait", "square"]},
+            },
+            ["query", "orientation"],
+        ),
     ),
 ]
 
@@ -522,7 +536,7 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
                 raise ToolError(problem)
             index = _section_index(session, data.position)
             design = session.design or infer_design(session.elements)
-            section = sections.render_section(data, design)
+            section = sections.render_section(data, design, session.photos_by_description)
             session.apply(operation(op="insert", parentId="__body", index=index, element=section))
             return done(
                 f"Added the {data.kind} section:\n{session.serialize([section], styles=False)}",
@@ -631,3 +645,67 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
         raise ToolError(f'Unknown tool "{name}".')
     except ToolError as error:
         return ToolOutcome(str(error), True, len(session.operations) - before)
+
+
+# ---------------------------------------------------------------------------
+# Tools that use the network
+# ---------------------------------------------------------------------------
+
+
+class FindPhotos(BaseModel):
+    query: str = Field(min_length=1, max_length=200)
+    orientation: Literal["landscape", "portrait", "square"] = "landscape"
+
+
+async def _section_photo(session: PageSession, description: str) -> None:
+    """Find a photo for a description, avoiding any already used on this page."""
+    results = await photos.search(description)
+    photo = next((p for p in results if p.url not in session.photos_by_url), None)
+    if photo:
+        session.photos_by_url[photo.url] = photo
+        session.photos_by_description[description] = photo
+
+
+async def _fetch_section_photos(session: PageSession, raw_input: Any) -> None:
+    if not photos.configured():
+        return
+    try:
+        spec = AddSection.model_validate(raw_input if raw_input is not None else {})
+    except ValidationError:
+        return  # execute_tool reports this to the model
+    if sections.validate(spec):
+        return
+    missing = [d for d in sections.photo_requests(spec) if d not in session.photos_by_description]
+    await asyncio.gather(*(_section_photo(session, d) for d in missing))
+
+
+async def _find_photos(session: PageSession, raw_input: Any) -> ToolOutcome:
+    try:
+        data = FindPhotos.model_validate(raw_input if raw_input is not None else {})
+    except ValidationError as error:
+        return ToolOutcome(_format_validation_error(error), True, 0)
+    if not photos.configured():
+        return ToolOutcome(
+            "Photo search isn't set up on this server. Tell the user it needs a free Pexels API key "
+            "(PEXELS_API_KEY in .env), or ask them for an image URL.",
+            True,
+            0,
+        )
+    results = [p for p in await photos.search(data.query, data.orientation) if p.url not in session.photos_by_url][:5]
+    if not results:
+        return ToolOutcome(f'No photos available for "{data.query}". Try different words.', True, 0)
+    lines = []
+    for photo in results:
+        # Recorded so the photographer is credited if the photo ends up on the page.
+        session.photos_by_url[photo.url] = photo
+        lines.append(f"{photo.url} ({photo.alt or 'no description'})")
+    return ToolOutcome("Photos, best match first:\n" + "\n".join(lines), False, 0)
+
+
+async def run_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome:
+    """Run a tool call, doing any network work first (execute_tool itself never waits)."""
+    if name == "find_photos":
+        return await _find_photos(session, raw_input)
+    if name == "add_section":
+        await _fetch_section_photos(session, raw_input)
+    return execute_tool(session, name, raw_input)

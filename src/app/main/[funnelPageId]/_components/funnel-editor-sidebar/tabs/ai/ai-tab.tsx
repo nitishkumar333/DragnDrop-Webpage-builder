@@ -82,6 +82,23 @@ const AssistantMessage = ({ message, chat }: { message: ChatMessage; chat: AiCha
           {message.content}
         </p>
       )}
+      {!working && !message.reverted && !!message.photoCredits?.length && (
+        <p className="text-[11px] text-muted-foreground">
+          Photos by{" "}
+          {message.photoCredits.map((credit, i) => (
+            <React.Fragment key={credit.url}>
+              {i > 0 && ", "}
+              <a href={credit.url} target="_blank" rel="noreferrer" className="underline">
+                {credit.name}
+              </a>
+            </React.Fragment>
+          ))}{" "}
+          on{" "}
+          <a href="https://www.pexels.com" target="_blank" rel="noreferrer" className="font-medium underline">
+            Pexels
+          </a>
+        </p>
+      )}
       {!working && message.modelLabel && (message.changeCount ?? 0) === 0 && (
         <p className="text-[11px] text-muted-foreground">{message.modelLabel}</p>
       )}

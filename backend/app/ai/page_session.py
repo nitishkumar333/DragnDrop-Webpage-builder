@@ -13,6 +13,7 @@ from typing import Any
 
 from .design import Design
 from .operations import Element, Operation, apply_operation, is_container, walk
+from .photos import Photo
 
 # Style values every element carries by default; omitted to save tokens.
 DEFAULT_STYLE_VALUES = {
@@ -48,6 +49,9 @@ class PageSession:
         self.operations: list[Operation] = []
         # Set by start_page; otherwise new sections read the design from the page.
         self.design: Design | None = None
+        # Stock photos fetched during this request.
+        self.photos_by_description: dict[str, Photo] = {}
+        self.photos_by_url: dict[str, Photo] = {}
         self._to_short: dict[str, str] = {}
         self._to_real: dict[str, str] = {}
         for el in walk(elements):
@@ -92,6 +96,16 @@ class PageSession:
                 self.register(el["id"])
         apply_operation(self.elements, op)
         self.operations.append(op)
+
+    def photo_credits(self) -> list[dict[str, str]]:
+        """The photographers of the stock photos on the page, in page order."""
+        credits: dict[str, str] = {}
+        for el in walk(self.elements):
+            content = el.get("content")
+            photo = self.photos_by_url.get(content.get("src")) if isinstance(content, dict) else None
+            if photo:
+                credits.setdefault(photo.photographer, photo.photographer_url)
+        return [{"name": name, "url": url} for name, url in credits.items()]
 
     @staticmethod
     def label(el: Element) -> str:

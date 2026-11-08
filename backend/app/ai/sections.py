@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from . import templates
 from .design import Design, Tone, ensure_contrast, mix
 from .operations import Element, merge_styles
+from .photos import Photo
 
 SECTION_KINDS = (
     "navbar", "hero", "logos", "stats", "features", "split", "steps", "testimonials",
@@ -112,9 +113,10 @@ def _text(value: str, name: str = "Text", **styles: Any) -> Element:
 class Painter:
     """Draws elements with one section's design and tone."""
 
-    def __init__(self, design: Design, tone: Tone):
+    def __init__(self, design: Design, tone: Tone, photos: dict[str, Photo] | None = None):
         self.design = design
         self.tone = tone
+        self.photos = photos or {}
 
     def heading(self, value: str, level: str, size: str, name: str = "Heading", **styles: Any) -> Element:
         return _leaf(
@@ -166,7 +168,11 @@ class Painter:
     def image(self, description: str, w: int, h: int, name: str = "Image", **styles: Any) -> Element:
         description = description.strip()
         is_url = bool(SAFE_SRC.match(description))
-        src = description if is_url else self._placeholder(description, w, h)
+        photo = self.photos.get(description)
+        if is_url:
+            src = description
+        else:
+            src = photo.url if photo else self._placeholder(description, w, h)
         alt = "" if is_url else description
         return _leaf(
             "image", name, {"src": src, "alt": alt},
@@ -610,9 +616,28 @@ def validate(spec: AddSection) -> str | None:
     return None
 
 
-def render_section(spec: AddSection, design: Design) -> Element:
+def photo_requests(spec: AddSection) -> list[str]:
+    """Descriptions in this section to search stock photos for, without duplicates.
+
+    Team sections are left out on purpose: a stock photo of a stranger above a
+    named team member would misrepresent who works there, so those stay labeled
+    placeholders for the user to replace.
+    """
+    if spec.kind == "gallery":
+        wanted = [item.text or item.title for item in spec.items]
+    elif spec.kind == "split" or (spec.kind == "hero" and spec.variant == "split"):
+        wanted = [spec.image or spec.heading]
+    elif spec.kind == "hero":
+        wanted = [spec.image]
+    else:
+        wanted = []
+    cleaned = (text.strip() for text in wanted)
+    return list(dict.fromkeys(text for text in cleaned if text and not SAFE_SRC.match(text)))
+
+
+def render_section(spec: AddSection, design: Design, photos: dict[str, Photo] | None = None) -> Element:
     tone_name = spec.background if spec.background != "auto" else DEFAULT_TONE.get(spec.kind, "default")
-    painter = Painter(design, design.tone(tone_name))
+    painter = Painter(design, design.tone(tone_name), photos)
     if spec.kind == "hero":
         return _hero(spec, painter, tone_name)
     if spec.kind == "cta":
