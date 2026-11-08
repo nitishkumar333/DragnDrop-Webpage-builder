@@ -4,6 +4,7 @@ import type { AiChatTurn, AiPhotoCredit, AiProviderInfo, AiStreamEvent } from "@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 } from "uuid";
 import { apiUrl } from "@/lib/api";
+import { BuildPlayer } from "@/lib/ai/build-player";
 import { takeInitialAiPrompt } from "@/lib/ai/initial-prompt";
 
 export type ChatMessage = {
@@ -94,6 +95,7 @@ export function useAiChat({ onAutoStart }: { onAutoStart?: () => void } = {}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const playerRef = useRef<BuildPlayer | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const messagesRef = useRef(messages);
@@ -162,7 +164,13 @@ export function useAiChat({ onAutoStart }: { onAutoStart?: () => void } = {}) {
   }, [messages, state.editor.elements]);
 
   // Stop a running request when the editor unmounts.
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      playerRef.current?.dispose();
+    },
+    []
+  );
 
   const updateMessage = (id: string, fn: (m: ChatMessage) => ChatMessage) =>
     setMessages((ms) => ms.map((m) => (m.id === id ? fn(m) : m)));
@@ -178,6 +186,8 @@ export function useAiChat({ onAutoStart }: { onAutoStart?: () => void } = {}) {
       const replyId = v4();
       let applied = 0;
       let finished = false;
+      // Shown once the canvas has caught up with the stream.
+      let showOutcome: (() => void) | undefined;
 
       setMessages((ms) => [
         ...ms,
@@ -187,41 +197,50 @@ export function useAiChat({ onAutoStart }: { onAutoStart?: () => void } = {}) {
       setBusy(true);
       const controller = new AbortController();
       abortRef.current = controller;
+      const player = new BuildPlayer({
+        dispatch,
+        historyKey,
+        getElements: () => stateRef.current.editor.elements,
+      });
+      playerRef.current = player;
 
       const handle = (event: AiStreamEvent) => {
         if (event.type === "operations") {
-          dispatch({
-            type: "APPLY_OPERATIONS",
-            payload: { operations: event.operations, historyKey },
-          });
           applied += event.operations.length;
-          if (event.status) {
-            updateMessage(replyId, (m) => ({
-              ...m,
-              steps: [...(m.steps || []), event.status!],
-            }));
-          }
+          const { status } = event;
+          player.play(
+            event.operations,
+            status
+              ? () =>
+                  updateMessage(replyId, (m) => ({
+                    ...m,
+                    steps: [...(m.steps || []), status],
+                  }))
+              : undefined
+          );
         } else if (event.type === "done") {
           finished = true;
           const label = providersRef.current.find((p) => p.id === event.provider)?.label;
-          updateMessage(replyId, (m) => ({
-            ...m,
-            modelLabel: event.model ? [label, event.model].filter(Boolean).join(" · ") : undefined,
-            photoCredits: event.photoCredits,
-            content: event.message,
-            status: "done",
-            changeCount: applied,
-            awaitingCapture: applied > 0,
-          }));
+          showOutcome = () =>
+            updateMessage(replyId, (m) => ({
+              ...m,
+              modelLabel: event.model ? [label, event.model].filter(Boolean).join(" · ") : undefined,
+              photoCredits: event.photoCredits,
+              content: event.message,
+              status: "done",
+              changeCount: applied,
+              awaitingCapture: applied > 0,
+            }));
         } else if (event.type === "error") {
           finished = true;
-          updateMessage(replyId, (m) => ({
-            ...m,
-            content: event.message,
-            status: "error",
-            changeCount: applied,
-            awaitingCapture: applied > 0,
-          }));
+          showOutcome = () =>
+            updateMessage(replyId, (m) => ({
+              ...m,
+              content: event.message,
+              status: "error",
+              changeCount: applied,
+              awaitingCapture: applied > 0,
+            }));
         }
       };
 
@@ -260,20 +279,27 @@ export function useAiChat({ onAutoStart }: { onAutoStart?: () => void } = {}) {
         }
         if (!finished) throw new Error("The connection closed before the AI finished.");
       } catch (error) {
-        if (finished) return;
-        const aborted = controller.signal.aborted;
-        updateMessage(replyId, (m) => ({
-          ...m,
-          content: aborted
-            ? "Stopped."
-            : error instanceof Error
-              ? error.message
-              : "Something went wrong.",
-          status: aborted ? "stopped" : "error",
-          changeCount: applied,
-          awaitingCapture: applied > 0,
-        }));
+        if (!finished) {
+          const aborted = controller.signal.aborted;
+          showOutcome = () =>
+            updateMessage(replyId, (m) => ({
+              ...m,
+              content: aborted
+                ? "Stopped."
+                : error instanceof Error
+                  ? error.message
+                  : "Something went wrong.",
+              status: aborted ? "stopped" : "error",
+              changeCount: applied,
+              awaitingCapture: applied > 0,
+            }));
+        }
       } finally {
+        // Stays busy until the canvas has caught up, so the next request starts
+        // from the finished page.
+        player.finish(showOutcome);
+        await player.finished;
+        playerRef.current = null;
         abortRef.current = null;
         setBusy(false);
       }
@@ -293,7 +319,14 @@ export function useAiChat({ onAutoStart }: { onAutoStart?: () => void } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageId, providersLoaded, send]);
 
-  const stop = useCallback(() => abortRef.current?.abort(), []);
+  // Everything already received goes straight onto the page, so a stop never
+  // leaves a half-built section.
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    playerRef.current?.skip();
+  }, []);
+
+  const skipAnimation = useCallback(() => playerRef.current?.skip(), []);
 
   /** Undo a run, only while it is still the most recent change to the page. */
   const undo = useCallback(
@@ -319,6 +352,8 @@ export function useAiChat({ onAutoStart }: { onAutoStart?: () => void } = {}) {
     setProvider,
     send,
     stop,
+    skipAnimation,
+    animating: state.editor.building,
     undo,
     clear,
     canUndo: (m: ChatMessage) =>

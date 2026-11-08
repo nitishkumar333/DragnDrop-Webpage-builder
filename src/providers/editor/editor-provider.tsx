@@ -45,6 +45,8 @@ export type Editor = {
   funnelPageId: string;
   /** Container currently highlighted as the drop target while dragging. */
   dropTargetId: string | null;
+  /** The AI is building on the canvas, which is locked while it plays. */
+  building: boolean;
 };
 
 export type HistoryState = {
@@ -90,6 +92,7 @@ const initialEditorState: Editor = {
   liveMode: false,
   funnelPageId: "",
   dropTargetId: null,
+  building: false,
 };
 
 const initialState: EditorState = {
@@ -281,6 +284,12 @@ const editorReducer = (
       return {
         ...state,
         editor: { ...state.editor, dropTargetId: action.payload.id },
+      };
+
+    case "SET_BUILDING":
+      return {
+        ...state,
+        editor: { ...state.editor, building: action.payload.building },
       };
 
     case "CHANGE_DEVICE":

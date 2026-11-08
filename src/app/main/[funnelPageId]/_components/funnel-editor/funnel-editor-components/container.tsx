@@ -35,7 +35,7 @@ const getDropIndex = (e: React.DragEvent<HTMLElement>) => {
 const Container = ({ element }: Props) => {
   const { id, content, type, styles } = element;
   const { dispatch, state } = useEditor();
-  const { liveMode, device, selectedElement, dropTargetId } = state.editor;
+  const { liveMode, device, selectedElement, dropTargetId, building } = state.editor;
   const isBody = type === "__body";
   const isSelected = !liveMode && selectedElement.id === id;
   const children = Array.isArray(content) ? content : [];
@@ -88,6 +88,7 @@ const Container = ({ element }: Props) => {
     <div
       style={styles}
       data-element-id={isBody ? undefined : id}
+      data-canvas-body={isBody || undefined}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onClick={handleClick}
@@ -118,7 +119,7 @@ const Container = ({ element }: Props) => {
         <Recursive key={child.id} element={child} />
       ))}
 
-      {isEmpty && !liveMode && (
+      {isEmpty && !liveMode && !building && (
         <div
           className={clsx(
             "pointer-events-none flex flex-col items-center justify-center gap-2 text-center text-sm text-slate-400",

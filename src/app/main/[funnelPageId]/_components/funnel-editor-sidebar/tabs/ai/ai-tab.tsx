@@ -66,7 +66,16 @@ const AssistantMessage = ({ message, chat }: { message: ChatMessage; chat: AiCha
       {working && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          {steps.length ? "Working…" : "Thinking…"}
+          {chat.animating ? "Building…" : steps.length ? "Working…" : "Thinking…"}
+          {chat.animating && (
+            <button
+              type="button"
+              className="ml-auto underline underline-offset-2 hover:text-foreground"
+              onClick={chat.skipAnimation}
+            >
+              Skip animation
+            </button>
+          )}
         </div>
       )}
       {message.content && (
