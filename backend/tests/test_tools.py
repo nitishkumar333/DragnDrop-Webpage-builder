@@ -52,6 +52,7 @@ def test_unsafe_values_are_rejected_without_changes():
         out = execute_tool(s, "update_styles", {"ids": ["h1"], "styles": [{"property": "backgroundImage", "value": value}]})
         assert out.is_error, value
     assert s.operations == []
+    s.user_urls = {"https://x.com/a.png"}  # the user gave this one
     assert not execute_tool(s, "update_styles", {"ids": ["h1"], "styles": [{"property": "backgroundImage", "value": "url(https://x.com/a.png)"}]}).is_error
 
 

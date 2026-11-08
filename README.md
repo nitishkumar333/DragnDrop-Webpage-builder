@@ -50,10 +50,19 @@ GROQ_API_KEY=...        # Groq        https://console.groq.com/keys
 
 AI_PROVIDER=anthropic   # optional default; otherwise the first provider with a key
 
-PEXELS_API_KEY=...      # optional, real stock photos  https://www.pexels.com/api/
+UNSPLASH_ACCESS_KEY=...  # optional, real stock photos  https://unsplash.com/developers
 ```
 
-With a Pexels key, generated pages use real stock photos, and the assistant can swap images on request ("use a real photo here"). Without one, or if a search fails, images are labeled placeholders. Team sections always use placeholders, so a stranger's photo never appears above a named team member. The chat credits Pexels and the photographers, as the [Pexels API guidelines](https://www.pexels.com/api/documentation/) ask.
+With an Unsplash access key, generated pages use real stock photos, and the assistant can swap images on request ("use a real photo here"). Without one, or if a search fails, images are labeled placeholders. Team sections always use placeholders, so a stranger's photo never appears above a named team member.
+
+Images only ever come from Unsplash or a placeholder. No model is asked to generate an image, and the backend rejects any other image URL from a model. The one exception is a URL the user types in their request, or one already on the page.
+
+The [Unsplash API guidelines](https://help.unsplash.com/en/articles/2511245-unsplash-api-guidelines) shape how this works (`backend/app/ai/photos.py`):
+
+- Pages hotlink the URLs Unsplash returns, as its guidelines require, so nothing is stored.
+- Using a photo triggers its download event.
+- A small "Photos by ... on Unsplash" line is added at the bottom of any page with stock photos, and the chat shows the same credit. Set `UNSPLASH_APP_NAME` to your app's name for the links' `utm_source`.
+- The free tier allows 50 requests an hour. A photo costs up to two (a search and a download event), so that is roughly four image-heavy pages an hour. Apply for production access (1000 an hour) before launch.
 
 Optional model overrides (defaults shown):
 

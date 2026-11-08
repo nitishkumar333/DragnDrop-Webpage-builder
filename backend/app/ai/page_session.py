@@ -25,6 +25,12 @@ DEFAULT_STYLE_VALUES = {
 }
 _SPACING_KEY = re.compile(r"^(margin|padding)(Top|Right|Bottom|Left)?$")
 _ZERO = re.compile(r"^0(px)?$")
+PLACEHOLDER_HOST = "https://placehold.co/"
+_URL_IN_TEXT = re.compile(r"https?://[^\s<>\"')\]]+", re.I)
+
+
+def urls_in_text(text: str) -> set[str]:
+    return {url.rstrip(".,;:!?") for url in _URL_IN_TEXT.findall(text)}
 
 
 def _truncate(value: str, limit: int) -> str:
@@ -43,6 +49,14 @@ def _css_value(value: Any) -> str:
     return str(value)
 
 
+def _image_texts(el: Element) -> list[str]:
+    """An element's image src and background image, where it has them."""
+    content = el.get("content")
+    src = content.get("src") if isinstance(content, dict) else None
+    background = (el.get("styles") or {}).get("backgroundImage")
+    return [text for text in (src, background) if isinstance(text, str) and text]
+
+
 class PageSession:
     def __init__(self, elements: list[Element]):
         self.elements = elements
@@ -52,6 +66,9 @@ class PageSession:
         # Stock photos fetched during this request.
         self.photos_by_description: dict[str, Photo] = {}
         self.photos_by_url: dict[str, Photo] = {}
+        self.tracked_photos: set[str] = set()
+        self.original_images = [text for el in walk(elements) for text in _image_texts(el)]
+        self.user_urls: set[str] = set()
         self._to_short: dict[str, str] = {}
         self._to_real: dict[str, str] = {}
         for el in walk(elements):
@@ -97,15 +114,33 @@ class PageSession:
         apply_operation(self.elements, op)
         self.operations.append(op)
 
-    def photo_credits(self) -> list[dict[str, str]]:
-        """The photographers of the stock photos on the page, in page order."""
-        credits: dict[str, str] = {}
+    def photos_on_page(self) -> list[Photo]:
+        """This request's stock photos that are on the page, in page order."""
+        found: dict[str, Photo] = {}
         for el in walk(self.elements):
-            content = el.get("content")
-            photo = self.photos_by_url.get(content.get("src")) if isinstance(content, dict) else None
-            if photo:
-                credits.setdefault(photo.photographer, photo.photographer_url)
+            for text in _image_texts(el):
+                for url, photo in self.photos_by_url.items():
+                    if url in text:
+                        found.setdefault(photo.id, photo)
+        return list(found.values())
+
+    def photo_credits(self) -> list[dict[str, str]]:
+        """The photographers to credit, without duplicates."""
+        credits: dict[str, str] = {}
+        for photo in self.photos_on_page():
+            credits.setdefault(photo.photographer, photo.photographer_url)
         return [{"name": name, "url": url} for name, url in credits.items()]
+
+    def image_source_allowed(self, url: str) -> bool:
+        """Images may only come from Unsplash results, placeholders, the page as it
+        was, or a URL the user typed. A model can't invent or generate an image."""
+        url = url.strip()
+        return (
+            url in self.photos_by_url
+            or url.startswith(PLACEHOLDER_HOST)
+            or url in self.user_urls
+            or any(url in text for text in self.original_images)
+        )
 
     @staticmethod
     def label(el: Element) -> str:

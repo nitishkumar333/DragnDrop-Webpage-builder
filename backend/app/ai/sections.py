@@ -616,6 +616,41 @@ def validate(spec: AddSection) -> str | None:
     return None
 
 
+def image_urls(spec: AddSection) -> list[str]:
+    """Image fields that contain a URL rather than a description to search for."""
+    fields = [spec.image, *(item.text for item in spec.items if spec.kind == "gallery")]
+    return [text.strip() for text in fields if SAFE_SRC.match(text.strip())]
+
+
+CREDITS_NAME = "Photo credits"
+
+
+def credit_link(design: Design, name: str, url: str) -> Element:
+    painter = Painter(design, design.tone("default"))
+    return painter.link(name, url, fontSize="12px", textDecoration="underline")
+
+
+def photo_credits_block(design: Design, credits: list[dict[str, str]], unsplash_url: str) -> Element:
+    """A small "Photos by … on Unsplash" line for the bottom of the page.
+
+    Unsplash asks for the photographer and Unsplash to be credited wherever a photo
+    is displayed. New photographers are inserted before the last two children.
+    """
+    tone = design.tone("default")
+    note = {"width": "auto", "color": tone.muted, "fontSize": "12px"}
+    row = _row(
+        "Credits",
+        [
+            _text("Photos by", "Intro", **note),
+            *(credit_link(design, c["name"], c["url"]) for c in credits),
+            _text("on", "On", **note),
+            credit_link(design, "Unsplash", unsplash_url),
+        ],
+        "8px", justifyContent="center", alignItems="center",
+    )
+    return _box(CREDITS_NAME, [row], {"backgroundColor": tone.background, **_pad("16px", "24px")})
+
+
 def photo_requests(spec: AddSection) -> list[str]:
     """Descriptions in this section to search stock photos for, without duplicates.
 

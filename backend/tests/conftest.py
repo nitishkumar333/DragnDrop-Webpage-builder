@@ -9,7 +9,7 @@ PROVIDER_KEYS = ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "DEEPS
 
 @pytest.fixture(autouse=True)
 def no_provider_keys(monkeypatch):
-    for key in PROVIDER_KEYS + ("AI_PROVIDER", "PEXELS_API_KEY"):
+    for key in PROVIDER_KEYS + ("AI_PROVIDER", "UNSPLASH_ACCESS_KEY"):
         monkeypatch.delenv(key, raising=False)
 
 

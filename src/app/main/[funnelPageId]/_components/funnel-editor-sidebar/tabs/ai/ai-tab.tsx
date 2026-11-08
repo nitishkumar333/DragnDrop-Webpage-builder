@@ -94,8 +94,13 @@ const AssistantMessage = ({ message, chat }: { message: ChatMessage; chat: AiCha
             </React.Fragment>
           ))}{" "}
           on{" "}
-          <a href="https://www.pexels.com" target="_blank" rel="noreferrer" className="font-medium underline">
-            Pexels
+          <a
+            href="https://unsplash.com/?utm_source=webpage_builder&utm_medium=referral"
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium underline"
+          >
+            Unsplash
           </a>
         </p>
       )}

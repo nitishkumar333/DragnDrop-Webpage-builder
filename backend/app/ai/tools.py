@@ -282,8 +282,8 @@ TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         "find_photos",
-        "Search stock photos, to replace an existing image or add a new one. Returns photo URLs "
-        "to use with update_content's src field. add_section finds photos by itself, so this "
+        "Search Unsplash stock photos, to replace an existing image or add a new one. Returns photo "
+        "URLs to use as update_content's src field or in a backgroundImage url(). add_section finds photos by itself, so this "
         "isn't needed for new sections.",
         _object(
             {
@@ -405,11 +405,26 @@ def sanitize_style_value(prop: str, raw: str) -> str:
     return value
 
 
-def style_record(styles: list[StyleDecl]) -> dict[str, str]:
-    return {
+IMAGE_SOURCE_ERROR = (
+    "Images may only come from find_photos, a https://placehold.co placeholder, or a URL the user "
+    "gave you. Never invent an image URL or generate an image."
+)
+
+
+def _check_image_source(session: PageSession, url: str) -> None:
+    if not session.image_source_allowed(url):
+        raise ToolError(IMAGE_SOURCE_ERROR)
+
+
+def style_record(session: PageSession, styles: list[StyleDecl]) -> dict[str, str]:
+    record = {
         s.property: "" if s.value == "" else sanitize_style_value(s.property, s.value)
         for s in styles
     }
+    for value in record.values():
+        for inner in _URL.findall(value):
+            _check_image_source(session, inner.strip().strip("'\""))
+    return record
 
 
 # ---------------------------------------------------------------------------
@@ -464,7 +479,9 @@ def _section_index(session: PageSession, position: str) -> int | None:
     if position == "top":
         return 0
     if position in ("", "end", "body"):
-        return None
+        # The end of the page, but above the photo credits line.
+        children = session.elements[0]["content"]
+        return next((i for i, s in enumerate(children) if s.get("name") == sections.CREDITS_NAME), None)
     anchor = _resolve(session, position)
     section = top_level_ancestor(session.elements, anchor["id"])
     ids = [s["id"] for s in session.elements[0]["content"]]
@@ -534,14 +551,18 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
             problem = sections.validate(data)
             if problem:
                 raise ToolError(problem)
+            for source in sections.image_urls(data):
+                _check_image_source(session, source)
             index = _section_index(session, data.position)
             design = session.design or infer_design(session.elements)
             section = sections.render_section(data, design, session.photos_by_description)
             session.apply(operation(op="insert", parentId="__body", index=index, element=section))
-            return done(
-                f"Added the {data.kind} section:\n{session.serialize([section], styles=False)}",
-                f"Added {section['name']} section",
-            )
+            result = f"Added the {data.kind} section:\n{session.serialize([section], styles=False)}"
+            if photos.configured():
+                missing = [d for d in sections.photo_requests(data) if d not in session.photos_by_description]
+                if missing:
+                    result += "\nNo stock photo was available, so these are labeled placeholders: " + "; ".join(missing)
+            return done(result, f"Added {section['name']} section")
 
         if isinstance(data, AddElement):
             parent = _resolve_container(session, data.parent_id)
@@ -556,7 +577,7 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
             ):
                 element["content"] = {**element["content"], "innerText": data.text}
             if data.styles:
-                element["styles"] = merge_styles(element.get("styles") or {}, style_record(data.styles))
+                element["styles"] = merge_styles(element.get("styles") or {}, style_record(session, data.styles))
             session.apply(operation(op="insert", parentId=parent["id"], index=index, element=element))
             return done(
                 f"Added:\n{session.serialize([element])}",
@@ -565,7 +586,7 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
 
         if isinstance(data, UpdateStyles):
             targets = [_resolve(session, i) for i in dict.fromkeys(data.ids)]
-            styles = style_record(data.styles)
+            styles = style_record(session, data.styles)
             for el in targets:
                 session.apply(operation(op="update_styles", id=el["id"], styles=styles))
             what = session.label(targets[0]) if len(targets) == 1 else _plural(len(targets), "element")
@@ -595,6 +616,8 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
                     if not _SAFE_SRC.match(value.strip()):
                         raise ToolError("src must be an http(s) URL.")
                     src = value.strip()
+                    if el.get("type") == "image":
+                        _check_image_source(session, src)
                     content["src"] = to_youtube_embed(src) if el.get("type") == "video" else src
                 elif item.field == "alt":
                     content["alt"] = value
@@ -657,16 +680,8 @@ class FindPhotos(BaseModel):
     orientation: Literal["landscape", "portrait", "square"] = "landscape"
 
 
-async def _section_photo(session: PageSession, description: str) -> None:
-    """Find a photo for a description, avoiding any already used on this page."""
-    results = await photos.search(description)
-    photo = next((p for p in results if p.url not in session.photos_by_url), None)
-    if photo:
-        session.photos_by_url[photo.url] = photo
-        session.photos_by_description[description] = photo
-
-
 async def _fetch_section_photos(session: PageSession, raw_input: Any) -> None:
+    """Find a photo for each image in the section, avoiding any already used on this page."""
     if not photos.configured():
         return
     try:
@@ -676,7 +691,12 @@ async def _fetch_section_photos(session: PageSession, raw_input: Any) -> None:
     if sections.validate(spec):
         return
     missing = [d for d in sections.photo_requests(spec) if d not in session.photos_by_description]
-    await asyncio.gather(*(_section_photo(session, d) for d in missing))
+    results = await asyncio.gather(*(photos.search(d) for d in missing))
+    for description, found in zip(missing, results):
+        photo = next((p for p in found if p.url not in session.photos_by_url), None)
+        if photo:
+            session.photos_by_url[photo.url] = photo
+            session.photos_by_description[description] = photo
 
 
 async def _find_photos(session: PageSession, raw_input: Any) -> ToolOutcome:
@@ -686,14 +706,19 @@ async def _find_photos(session: PageSession, raw_input: Any) -> ToolOutcome:
         return ToolOutcome(_format_validation_error(error), True, 0)
     if not photos.configured():
         return ToolOutcome(
-            "Photo search isn't set up on this server. Tell the user it needs a free Pexels API key "
-            "(PEXELS_API_KEY in .env), or ask them for an image URL.",
+            "Photo search isn't set up on this server. Tell the user it needs a free Unsplash access key "
+            "(UNSPLASH_ACCESS_KEY in .env), or ask them for an image URL.",
             True,
             0,
         )
-    results = [p for p in await photos.search(data.query, data.orientation) if p.url not in session.photos_by_url][:5]
+    found = await photos.search(data.query, data.orientation)
+    results = [p for p in found if p.url not in session.photos_by_url][:5]
     if not results:
-        return ToolOutcome(f'No photos available for "{data.query}". Try different words.', True, 0)
+        return ToolOutcome(
+            f'No photos available for "{data.query}" right now. Try different words, or ask the user for an image URL.',
+            True,
+            0,
+        )
     lines = []
     for photo in results:
         # Recorded so the photographer is credited if the photo ends up on the page.
@@ -702,10 +727,46 @@ async def _find_photos(session: PageSession, raw_input: Any) -> ToolOutcome:
     return ToolOutcome("Photos, best match first:\n" + "\n".join(lines), False, 0)
 
 
+def _update_credits_block(session: PageSession) -> None:
+    """Keep the page's "Photos by … on Unsplash" line in step with the photos on it."""
+    credits = session.photo_credits()
+    if not credits:
+        return
+    body = session.elements[0]
+    block = next((s for s in body["content"] if s.get("name") == sections.CREDITS_NAME), None)
+    design = session.design or infer_design(session.elements)
+    if block is None:
+        element = sections.photo_credits_block(design, credits, photos.unsplash_url())
+        session.apply(operation(op="insert", parentId=body["id"], element=element))
+        return
+    row = next((c for c in block["content"] if isinstance(c.get("content"), list)), None)
+    if row is None:
+        return
+    credited = {c["content"].get("href") for c in row["content"] if c.get("type") == "link"}
+    for credit in credits:
+        if credit["url"] not in credited:
+            link = sections.credit_link(design, credit["name"], credit["url"])
+            # Before "on Unsplash", the row's last two children.
+            index = max(len(row["content"]) - 2, 0)
+            session.apply(operation(op="insert", parentId=row["id"], index=index, element=link))
+
+
+async def _after_tool(session: PageSession) -> None:
+    """What Unsplash asks for once a photo is in use: credit it and report the download."""
+    _update_credits_block(session)
+    new = [p for p in session.photos_on_page() if p.id not in session.tracked_photos]
+    session.tracked_photos.update(p.id for p in new)
+    await asyncio.gather(*(photos.track_download(p) for p in new))
+
+
 async def run_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome:
-    """Run a tool call, doing any network work first (execute_tool itself never waits)."""
+    """Run a tool call, doing any network work around it (execute_tool itself never waits)."""
     if name == "find_photos":
         return await _find_photos(session, raw_input)
     if name == "add_section":
         await _fetch_section_photos(session, raw_input)
-    return execute_tool(session, name, raw_input)
+    outcome = execute_tool(session, name, raw_input)
+    before = len(session.operations)
+    await _after_tool(session)
+    outcome.operation_count += len(session.operations) - before
+    return outcome

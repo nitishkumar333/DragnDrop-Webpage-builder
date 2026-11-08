@@ -4,13 +4,14 @@ import json
 from typing import Any, AsyncIterator
 
 from .operations import Element, find_element
-from .page_session import PageSession
+from .page_session import PageSession, urls_in_text
 from .prompt import SYSTEM_PROMPT
 from .providers import ChatTurn, Provider, ProviderError
 from .providers.base import ToolResult
 from .tools import TOOLS, run_tool
 
-MAX_TURNS = 12
+# Enough for a full page built one section per turn, plus some follow-up edits.
+MAX_TURNS = 20
 MAX_OPERATIONS = 400
 
 
@@ -49,6 +50,7 @@ async def run_agent(
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield stream events: `operations` while working, then `done` or `error`."""
     session = PageSession(elements)
+    session.user_urls = urls_in_text(prompt)
     conversation = provider.start(
         system=SYSTEM_PROMPT,
         tools=TOOLS,
