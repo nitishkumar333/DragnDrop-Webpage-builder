@@ -26,7 +26,7 @@ const FunnelEditorSidebar = () => {
   const suppressSwitch = useRef(false);
   // Lives here (not in the tab) so a running request and the conversation
   // survive switching tabs.
-  const aiChat = useAiChat();
+  const aiChat = useAiChat({ onAutoStart: () => setTab("AI") });
 
   useEffect(() => {
     if (suppressSwitch.current) {

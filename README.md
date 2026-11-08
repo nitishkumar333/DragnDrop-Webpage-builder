@@ -38,7 +38,7 @@ Other scripts:
 
 ## AI assistant
 
-The editor sidebar has an **AI assistant** tab (sparkles icon). Users describe a change in plain language and the assistant edits the page directly. Changes appear on the canvas as they are made, and each request is a single undo step. A menu in the tab picks the AI provider.
+The editor sidebar has an **AI assistant** tab (sparkles icon). Users describe a change in plain language and the assistant edits the page directly, or describe a business and it builds a whole page. Pages can also be generated from the "new page" dialog on the dashboard. Changes appear on the canvas as they are made, and each request is a single undo step. A menu in the tab picks the AI provider.
 
 Add a key for at least one provider to `.env` and restart `npm run dev`:
 
@@ -64,7 +64,8 @@ GROQ_MODEL=openai/gpt-oss-120b
 How it works:
 
 1. The chat (`src/app/main/[funnelPageId]/_components/funnel-editor-sidebar/tabs/ai/`) sends `POST /api/ai`. The request contains the current page, the selected element, recent chat turns and the chosen provider.
-2. `backend/app/ai/agent.py` runs a tool loop. The model reads a compact outline of the page (`page_session.py`) and calls the tools in `tools.py`: `add_block`, `add_element`, `update_styles`, `update_content`, `delete_elements`, `move_element`, `duplicate_element`. Every call is validated and sanitized. Errors go back to the model so it can correct itself.
+2. `backend/app/ai/agent.py` runs a tool loop. The model reads a compact outline of the page (`page_session.py`) and calls the tools in `tools.py`: `start_page`, `add_section`, `add_element`, `update_styles`, `update_content`, `delete_elements`, `move_element`, `duplicate_element`. Every call is validated and sanitized. Errors go back to the model so it can correct itself.
+   - To build a page, the model picks a design with `start_page` (`design.py` corrects the colors for contrast) and writes each section's content with `add_section`. `sections.py` turns that content into normal, editable elements, so the layout quality doesn't depend on the model. Sections added to an existing page read the design from that page.
 3. Each change becomes an operation that streams back as newline-delimited JSON. The editor applies it with the same logic the backend used (`src/lib/ai/operations.ts` ↔ `backend/app/ai/operations.py`). `backend/tests/test_ts_parity.py` checks that both produce identical pages.
 4. Provider adapters are in `backend/app/ai/providers/`:
    - Claude uses the Anthropic SDK.

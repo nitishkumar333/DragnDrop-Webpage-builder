@@ -4,6 +4,7 @@ import type { AiChatTurn, AiProviderInfo, AiStreamEvent } from "@/lib/ai/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 } from "uuid";
 import { apiUrl } from "@/lib/api";
+import { takeInitialAiPrompt } from "@/lib/ai/initial-prompt";
 
 export type ChatMessage = {
   id: string;
@@ -86,7 +87,7 @@ const toHistory = (messages: ChatMessage[]): AiChatTurn[] => {
   return turns.slice(-20);
 };
 
-export function useAiChat() {
+export function useAiChat({ onAutoStart }: { onAutoStart?: () => void } = {}) {
   const { state, dispatch } = useEditor();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
@@ -276,6 +277,18 @@ export function useAiChat() {
     },
     [dispatch]
   );
+
+  // Run the description from the "new page" dialog once the provider list is in,
+  // which also means the page has loaded.
+  const providersLoaded = providers.length > 0;
+  useEffect(() => {
+    if (!pageId || !providersLoaded) return;
+    const initialPrompt = takeInitialAiPrompt(pageId);
+    if (!initialPrompt) return;
+    onAutoStart?.();
+    send(initialPrompt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageId, providersLoaded, send]);
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
 

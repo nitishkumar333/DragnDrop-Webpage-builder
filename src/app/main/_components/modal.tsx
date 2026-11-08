@@ -7,6 +7,7 @@ import { v4 } from "uuid";
 import { Edit, Plus } from "lucide-react";
 import clsx from "clsx";
 import { apiUrl } from "@/lib/api";
+import { setInitialAiPrompt } from "@/lib/ai/initial-prompt";
 
 type Props = {
   pages: { id: string; name?: string }[];
@@ -14,16 +15,25 @@ type Props = {
 
 const Modal = ({ pages }: Props) => {
   const [input, setInput] = useState("");
+  const [description, setDescription] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
   const funnelPageId = v4();
+  const prompt = description.trim();
+  const name = input.trim() || prompt.slice(0, 60);
   const createHandler = async () => {
-    await fetch(
+    if (!name) {
+      toast("Add a name", {
+        description: "Enter a page name or describe the page you want.",
+      });
+      return;
+    }
+    const response = await fetch(
       apiUrl("/getFunnel/create-new-webpage"),
       {
         method: "POST",
         body: JSON.stringify({
-          name: input,
+          name,
           id: funnelPageId,
         }),
         headers: {
@@ -31,6 +41,11 @@ const Modal = ({ pages }: Props) => {
         },
       }
     );
+    if (!response.ok) {
+      toast("Could not create the page", { description: "Please try again." });
+      return;
+    }
+    if (prompt) setInitialAiPrompt(funnelPageId, prompt);
     router.push(`/main/${funnelPageId}`);
     toast("Success", {
       description: "Created New Webpage",
@@ -55,6 +70,13 @@ const Modal = ({ pages }: Props) => {
                 onChange={(e) => setInput(e.target.value)}
               />
             </div>
+            <textarea
+              className="w-full resize-none px-3 py-3 font-sans text-sm font-normal transition-all bg-transparent border rounded-md"
+              rows={4}
+              maxLength={4000}
+              placeholder="Describe your page and AI will build it (optional). e.g. A landing page for a specialty coffee roaster in Portland"
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </div>
           <div className="p-6 pt-0">
             <button
@@ -62,7 +84,7 @@ const Modal = ({ pages }: Props) => {
               type="button"
               onClick={createHandler}
             >
-              CREATE
+              {prompt ? "CREATE WITH AI" : "CREATE"}
             </button>
           </div>
         </div>
