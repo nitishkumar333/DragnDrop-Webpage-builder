@@ -45,6 +45,20 @@ def test_save_unknown_page_is_a_no_op(client):
     assert client.get("/api/getFunnel/nope").text == "null"
 
 
+def test_delete_removes_only_that_page(client):
+    client.post("/api/getFunnel/create-new-webpage", json={"id": "keep", "name": "Keep"})
+    client.post("/api/getFunnel/create-new-webpage", json={"id": "gone", "name": "Gone"})
+
+    assert client.delete("/api/getFunnel/gone").json() == {"result": True}
+
+    assert client.get("/api/getFunnel/gone").text == "null"
+    assert [p["id"] for p in client.get("/api/getFunnel/getAll").json()] == ["keep"]
+
+
+def test_delete_unknown_page_is_not_found(client):
+    assert client.delete("/api/getFunnel/nope").status_code == 404
+
+
 def test_create_requires_id_and_name(client):
     assert client.post("/api/getFunnel/create-new-webpage", json={"name": "x"}).status_code == 400
     assert client.post("/api/getFunnel/create-new-webpage", json={"id": "x", "name": ""}).status_code == 422

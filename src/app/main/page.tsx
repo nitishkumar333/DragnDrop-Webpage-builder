@@ -5,6 +5,7 @@ import { apiUrl } from "@/lib/api";
 import { AlertCircle, Layers, Plus, Sparkles } from "lucide-react";
 import Link from "next/link";
 import React, { useCallback, useEffect, useState } from "react";
+import DeletePageDialog from "./_components/delete-page-dialog";
 import NewPageDialog from "./_components/new-page-dialog";
 import PageCard, { PageCardSkeleton, PageSummary } from "./_components/page-card";
 
@@ -12,6 +13,7 @@ const Page = () => {
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [creating, setCreating] = useState(false);
+  const [pageToDelete, setPageToDelete] = useState<PageSummary | null>(null);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -107,7 +109,7 @@ const Page = () => {
                   <span className="text-sm font-medium">Create a new page</span>
                 </button>
                 {pages.map((page) => (
-                  <PageCard key={page.id} page={page} />
+                  <PageCard key={page.id} page={page} onDelete={() => setPageToDelete(page)} />
                 ))}
               </>
             )}
@@ -116,6 +118,14 @@ const Page = () => {
       </main>
 
       <NewPageDialog open={creating} onOpenChange={setCreating} />
+      <DeletePageDialog
+        page={pageToDelete}
+        onClose={() => setPageToDelete(null)}
+        onDeleted={(id) => {
+          setPages((current) => current.filter((p) => p.id !== id));
+          setPageToDelete(null);
+        }}
+      />
     </div>
   );
 };

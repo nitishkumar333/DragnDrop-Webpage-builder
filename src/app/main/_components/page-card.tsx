@@ -1,6 +1,6 @@
 "use client";
 import clsx from "clsx";
-import { ArrowUpRight, ExternalLink, LayoutTemplate } from "lucide-react";
+import { ArrowUpRight, ExternalLink, LayoutTemplate, Trash2 } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -107,7 +107,10 @@ const PagePreview = ({ page }: { page: PageSummary }) => {
   );
 };
 
-const PageCard = ({ page }: { page: PageSummary }) => {
+const ACTION_BUTTON =
+  "grid h-8 w-8 place-items-center rounded-lg border bg-background/90 shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+const PageCard = ({ page, onDelete }: { page: PageSummary; onDelete: () => void }) => {
   const name = page.name || "Untitled page";
   const edited = editedAgo(page.updatedAt);
 
@@ -135,16 +138,27 @@ const PageCard = ({ page }: { page: PageSummary }) => {
         <p className="mt-0.5 h-4 truncate text-xs text-muted-foreground">{edited}</p>
       </div>
 
-      <a
-        href={`/site/${page.id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        title="View site"
-        aria-label={`View ${name} site`}
-        className="absolute right-2.5 top-2.5 z-10 grid h-8 w-8 place-items-center rounded-lg border bg-background/90 text-foreground opacity-0 shadow-sm backdrop-blur transition hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 [@media(hover:none)]:opacity-100"
-      >
-        <ExternalLink className="h-4 w-4" />
-      </a>
+      <div className="absolute right-2.5 top-2.5 z-10 flex gap-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+        <a
+          href={`/site/${page.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="View site"
+          aria-label={`View ${name} site`}
+          className={clsx(ACTION_BUTTON, "text-foreground hover:bg-accent hover:text-accent-foreground")}
+        >
+          <ExternalLink className="h-4 w-4" />
+        </a>
+        <button
+          type="button"
+          title="Delete page"
+          aria-label={`Delete ${name}`}
+          onClick={onDelete}
+          className={clsx(ACTION_BUTTON, "text-foreground hover:border-destructive hover:bg-destructive hover:text-destructive-foreground")}
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
     </article>
   );
 };

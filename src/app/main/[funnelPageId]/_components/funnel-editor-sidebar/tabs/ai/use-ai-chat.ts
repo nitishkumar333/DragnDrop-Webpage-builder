@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 } from "uuid";
 import { apiUrl } from "@/lib/api";
 import { BuildPlayer } from "@/lib/ai/build-player";
+import { chatStorageKey } from "@/lib/ai/chat-storage";
 import { takeInitialAiPrompt } from "@/lib/ai/initial-prompt";
 
 export type ChatMessage = {
@@ -24,12 +25,9 @@ export type ChatMessage = {
   reverted?: boolean;
 };
 
-const STORAGE_PREFIX = "ai-chat:";
 const MAX_STORED = 60;
 
 const PROVIDER_KEY = "ai-provider";
-
-const storageKey = (pageId: string) => `${STORAGE_PREFIX}${pageId}`;
 
 const readStoredProvider = () => {
   try {
@@ -41,7 +39,7 @@ const readStoredProvider = () => {
 
 const loadMessages = (pageId: string): ChatMessage[] => {
   try {
-    const raw = localStorage.getItem(storageKey(pageId));
+    const raw = localStorage.getItem(chatStorageKey(pageId));
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -62,7 +60,7 @@ const saveMessages = (pageId: string, messages: ChatMessage[]) => {
       modelLabel: m.modelLabel,
       photoCredits: m.photoCredits,
     }));
-    localStorage.setItem(storageKey(pageId), JSON.stringify(slim));
+    localStorage.setItem(chatStorageKey(pageId), JSON.stringify(slim));
   } catch {
     // Storage can be full or blocked; the chat still works without it.
   }

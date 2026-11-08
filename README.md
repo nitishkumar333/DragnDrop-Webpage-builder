@@ -99,6 +99,7 @@ The backend keeps the original routes, so existing pages keep working:
 | `POST /api/getFunnel/create-new-webpage` | Create a page: `{ id, name }` |
 | `GET /api/getFunnel/{id}` | Get a page (`null` if it doesn't exist) |
 | `POST /api/getFunnel/{id}` | Save the page's element tree |
+| `DELETE /api/getFunnel/{id}` | Delete a page (`404` if it doesn't exist) |
 | `GET /api/ai/providers` | Providers, their models and whether a key is configured |
 | `POST /api/ai` | Run the assistant (streams NDJSON events: `operations`, `done`, `error`) |
 
