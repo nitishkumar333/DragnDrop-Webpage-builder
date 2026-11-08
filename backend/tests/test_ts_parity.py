@@ -10,9 +10,10 @@ from pathlib import Path
 import pytest
 
 from app.ai.page_session import PageSession
-from app.ai.tools import BLOCK_KINDS, execute_tool
+from app.ai.tools import execute_tool
 
 from .conftest import body_with
+from .test_sections import SECTION_SPECS
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -37,10 +38,10 @@ def random_session(seed: int) -> tuple[list, PageSession]:
     session = PageSession(json.loads(json.dumps(initial)))
     for _ in range(25):
         ids = [s for s in session._to_real]  # every short id known so far
-        tool = rng.choice(["add_block", "add_element", "update_styles", "update_content", "delete_elements", "move_element", "duplicate_element"])
+        tool = rng.choice(["add_section", "add_element", "update_styles", "update_content", "delete_elements", "move_element", "duplicate_element"])
         pick = lambda: rng.choice(ids)  # noqa: E731
         args = {
-            "add_block": lambda: {"kind": rng.choice(list(BLOCK_KINDS)), **({"after_id": pick()} if rng.random() < 0.5 else {})},
+            "add_section": lambda: {**rng.choice(SECTION_SPECS), **({"position": pick()} if rng.random() < 0.5 else {})},
             "add_element": lambda: {"type": rng.choice(["text", "heading", "button", "spacer", "container"]), "parent_id": pick(), "styles": [{"property": "color", "value": "#123456"}], **({"after_id": "top"} if rng.random() < 0.3 else {})},
             "update_styles": lambda: {"ids": [pick(), pick()], "styles": [{"property": "fontSize", "value": str(rng.randint(10, 60))}, {"property": "marginTop", "value": ""}]},
             "update_content": lambda: {"id": pick(), "fields": [{"field": "text", "value": f"text {rng.random():.3f}"}]},

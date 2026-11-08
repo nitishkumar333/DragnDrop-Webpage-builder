@@ -1,5 +1,4 @@
-from app.ai import templates
-from app.ai.operations import apply_operation, find_element, find_parent
+from app.ai.operations import apply_operation, find_element, find_parent, walk
 from app.ai.page_session import PageSession
 from app.ai.tools import execute_tool
 
@@ -29,27 +28,6 @@ def test_outline_skips_noise():
     s = PageSession(body_with(heading("h1")))
     line = s.serialize().splitlines()[1]
     assert line == '  [h1] heading h2 "Heading" text="Hi" {fontSize:40px}'
-
-
-def test_add_block_inserts_template_after_section():
-    tree = body_with(section("s1", heading("h1")), section("s2"))
-    s = PageSession(tree)
-    out = execute_tool(s, "add_block", {"kind": "pricing", "after_id": "h1"})
-    assert not out.is_error and out.status == "Added Pricing section"
-    body = s.elements[0]["content"]
-    assert [c["name"] for c in body] == ["Section", "Pricing", "Section"]
-    assert s.operations[0]["op"] == "insert" and s.operations[0]["index"] == 1
-    # Fresh ids everywhere, and they're listed for the model.
-    assert body[1]["id"] != templates.create_element("pricing")["id"]
-    assert f"[{s.short_id(body[1]['id'])}] container" in out.result
-
-
-def test_add_block_top_and_end():
-    s = PageSession(body_with(section("s1")))
-    execute_tool(s, "add_block", {"kind": "navbar", "after_id": "top"})
-    execute_tool(s, "add_block", {"kind": "footer"})
-    assert [c["name"] for c in s.elements[0]["content"]][0] == "Navbar"
-    assert "index" not in s.operations[1]  # append
 
 
 def test_update_styles_sanitizes_and_normalizes():
@@ -123,11 +101,12 @@ def test_add_move_duplicate_delete():
 
 def test_inserted_element_in_operation_is_not_mutated_later():
     s = PageSession(body_with())
-    execute_tool(s, "add_block", {"kind": "cta"})
+    execute_tool(s, "add_section", {"kind": "cta", "heading": "Original", "variant": "auto"})
     sent = s.operations[0]["element"]
-    text_id = next(c for c in sent["content"][0]["content"] if c["type"] == "heading")["id"]
-    execute_tool(s, "update_content", {"id": s.short_id(text_id), "fields": [{"field": "text", "value": "Changed"}]})
-    assert next(c for c in sent["content"][0]["content"] if c["type"] == "heading")["content"]["innerText"] != "Changed"
+    sent_heading = next(el for el in walk([sent]) if el["type"] == "heading")
+    execute_tool(s, "update_content", {"id": s.short_id(sent_heading["id"]), "fields": [{"field": "text", "value": "Changed"}]})
+    assert sent_heading["content"]["innerText"] == "Original"
+    assert find_element(s.elements, sent_heading["id"])["content"]["innerText"] == "Changed"
 
 
 def test_operations_skip_invalid_targets():

@@ -11,24 +11,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
-from . import templates
+from . import sections, templates
+from .design import CORNERS, font_value, infer_design, is_hex, make_design, normalize_hex
 from .operations import find_element, find_parent, merge_styles, operation, top_level_ancestor
 from .page_session import PageSession
+from .sections import SAFE_HREF as _SAFE_HREF
+from .sections import SAFE_SRC as _SAFE_SRC
+from .sections import AddSection
 
 # ---------------------------------------------------------------------------
 # Vocabulary
 # ---------------------------------------------------------------------------
-
-BLOCK_KINDS = {
-    "navbar": "navbar",
-    "hero": "hero",
-    "features": "features",
-    "testimonial": "testimonial",
-    "pricing": "pricing",
-    "cta": "cta",
-    "footer": "footer",
-    "gallery": "grid",
-}
 
 ELEMENT_KINDS = {
     "heading": "heading",
@@ -114,24 +107,95 @@ def _object(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
     }
 
 
+_COLOR = 'A hex color such as "#1d4ed8".'
+
+_SECTION_ITEM = _object(
+    {
+        "title": {"type": "string", "description": "Name, title, question, plan, link column or label."},
+        "text": {"type": "string", "description": "Description, answer, quote or image description."},
+        "value": {"type": "string", "description": 'A stat\'s number, a plan\'s price ("$29/mo") or a person\'s role.'},
+        "icon": {"type": "string", "description": "One emoji for a features item, otherwise empty."},
+        "href": {"type": "string", "description": "Link target for navbar links and pricing buttons, otherwise empty."},
+        "points": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "A pricing plan's features or a footer column's links, otherwise empty.",
+        },
+        "highlighted": {"type": "boolean", "description": "True for the one recommended pricing plan."},
+    },
+    ["title", "text", "value", "icon", "href", "points", "highlighted"],
+)
+
 TOOLS: list[ToolDefinition] = [
     ToolDefinition(
-        "add_block",
-        "Insert a pre-designed, fully editable section into the page body. Blocks: navbar "
-        "(logo + links + button), hero (headline, subtext, two buttons, image), features (3 "
-        "feature cards), testimonial (quote card on dark background), pricing (3 plans), cta "
-        "(call-to-action banner), footer (columns of links + copyright), gallery (grid of "
-        "images). The result lists the new block's elements with their ids so you can then "
-        "customize its text and styles.",
+        "start_page",
+        "Choose the design for a new or redesigned page: palette, fonts and corners. Sets the page "
+        "background and font, and optionally removes the existing sections. Call it once, before "
+        "the first add_section, when building a whole page. Not needed to add a section to a page.",
         _object(
             {
-                "kind": {"type": "string", "enum": list(BLOCK_KINDS)},
-                "after_id": {
-                    "type": "string",
-                    "description": 'Insert after the top-level section that contains this element. Use "top" to insert at the very top of the page. Omit to append at the end.',
+                "accent": {"type": "string", "description": _COLOR + " Buttons and highlights."},
+                "background": {"type": "string", "description": _COLOR + " The page background."},
+                "surface": {"type": "string", "description": _COLOR + " Card background."},
+                "text": {"type": "string", "description": _COLOR + " Headings and main text."},
+                "muted": {"type": "string", "description": _COLOR + " Secondary text."},
+                "heading_font": {"type": "string", "enum": [f["label"] for f in templates.fonts()]},
+                "body_font": {"type": "string", "enum": [f["label"] for f in templates.fonts()]},
+                "corners": {"type": "string", "enum": list(CORNERS), "description": "How rounded cards and buttons are."},
+                "replace_existing": {
+                    "type": "boolean",
+                    "description": "Delete every existing section first. Only when the user asked for a new page or redesign, or the page is empty.",
                 },
             },
-            ["kind"],
+            ["accent", "background", "surface", "text", "muted", "heading_font", "body_font", "corners", "replace_existing"],
+        ),
+    ),
+    ToolDefinition(
+        "add_section",
+        "Add a complete, professionally laid out section using the page's design. You write the "
+        "content; layout, spacing and colors are handled for you. Use empty strings and empty "
+        "lists for fields a section doesn't use.\n"
+        "Kinds: navbar (heading=brand, items=links, primary button); hero (variant centered or "
+        "split, eyebrow, heading, subheading, two buttons, image); logos (heading=caption, "
+        "items=company names); stats (items with value and title); features (variant cards or "
+        "columns; items with icon, title, text); split (image beside text; variant image_left or "
+        "image_right; items=bullet points); steps (numbered items); testimonials (items with text "
+        "as the quote, title as the name, value as the role); pricing (items with title, value, "
+        "text, points, highlighted; primary_label is each plan's button); faq (items with title "
+        "as the question, text as the answer); gallery (items with title, text describing the "
+        "image); team (items with title, value, text); cta (heading, subheading, buttons); contact "
+        "(a contact form, with items as contact details); footer (heading=brand, subheading=tagline, "
+        "items=link columns with title and points).",
+        _object(
+            {
+                "kind": {"type": "string", "enum": list(sections.SECTION_KINDS)},
+                "variant": {"type": "string", "enum": list(sections.VARIANTS), "description": 'Layout option, or "auto".'},
+                "background": {
+                    "type": "string",
+                    "enum": list(sections.BACKGROUNDS),
+                    "description": 'default = page background, alt = subtle tint, dark and accent = bold bands. "auto" picks a sensible one.',
+                },
+                "position": {
+                    "type": "string",
+                    "description": '"end", "top", or the id of an element: the section goes after the top-level section containing it.',
+                },
+                "eyebrow": {"type": "string", "description": "A short label above the heading."},
+                "heading": {"type": "string"},
+                "subheading": {"type": "string"},
+                "primary_label": {"type": "string"},
+                "primary_href": {"type": "string"},
+                "secondary_label": {"type": "string"},
+                "secondary_href": {"type": "string"},
+                "image": {
+                    "type": "string",
+                    "description": "What the image should show (becomes a labeled placeholder), or an https URL the user gave you. Used by hero and split.",
+                },
+                "items": {"type": "array", "items": _SECTION_ITEM},
+            },
+            [
+                "kind", "variant", "background", "position", "eyebrow", "heading", "subheading",
+                "primary_label", "primary_href", "secondary_label", "secondary_href", "image", "items",
+            ],
         ),
     ),
     ToolDefinition(
@@ -229,9 +293,16 @@ class StyleDecl(BaseModel):
     value: str = Field(max_length=500)
 
 
-class AddBlock(BaseModel):
-    kind: Literal[tuple(BLOCK_KINDS)]  # type: ignore[valid-type]
-    after_id: str | None = None
+class StartPage(BaseModel):
+    accent: str
+    background: str
+    surface: str
+    text: str
+    muted: str
+    heading_font: str
+    body_font: str
+    corners: Literal[tuple(CORNERS)] = "soft"  # type: ignore[valid-type]
+    replace_existing: bool = False
 
 
 class AddElement(BaseModel):
@@ -272,7 +343,8 @@ class DuplicateElement(BaseModel):
 
 
 INPUT_MODELS: dict[str, type[BaseModel]] = {
-    "add_block": AddBlock,
+    "start_page": StartPage,
+    "add_section": AddSection,
     "add_element": AddElement,
     "update_styles": UpdateStyles,
     "update_content": UpdateContent,
@@ -293,8 +365,6 @@ class ToolError(Exception):
 _UNSAFE_CSS = re.compile(r"[<>{}]|javascript:|expression\s*\(|@import|behavior\s*:", re.I)
 _URL = re.compile(r"url\(([^)]*)\)", re.I)
 _NUMBER = re.compile(r"^-?\d+(\.\d+)?$")
-_SAFE_HREF = re.compile(r"^(https?://|mailto:|tel:|#|/(?!/))", re.I)
-_SAFE_SRC = re.compile(r"^https?://", re.I)
 _YOUTUBE = re.compile(r"(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/)([\w-]{11})")
 
 
@@ -374,6 +444,48 @@ def _index_after(session: PageSession, parent, after_id: str | None) -> int | No
     raise ToolError(f'"{after_id}" is not a direct child of the given parent.')
 
 
+def _section_index(session: PageSession, position: str) -> int | None:
+    """Where a new top-level section goes; None appends."""
+    position = position.strip()
+    if position == "top":
+        return 0
+    if position in ("", "end", "body"):
+        return None
+    anchor = _resolve(session, position)
+    section = top_level_ancestor(session.elements, anchor["id"])
+    ids = [s["id"] for s in session.elements[0]["content"]]
+    return ids.index(section["id"]) + 1 if section and section["id"] in ids else None
+
+
+def _start_page(session: PageSession, data: StartPage) -> None:
+    colors = {}
+    for field in ("accent", "background", "surface", "text", "muted"):
+        value = getattr(data, field)
+        if not is_hex(value):
+            raise ToolError(f'{field} must be a hex color like "#1d4ed8", not {json.dumps(value)}.')
+        colors[field] = normalize_hex(value)
+    fonts = {}
+    for field in ("heading_font", "body_font"):
+        fonts[field] = font_value(getattr(data, field))
+        if fonts[field] is None:
+            available = ", ".join(f["label"] for f in templates.fonts())
+            raise ToolError(f'{field} "{getattr(data, field)}" is not available. Use one of: {available}.')
+
+    design = make_design(**colors, **fonts, corners=data.corners)
+    session.design = design
+    body = session.elements[0]
+    if data.replace_existing:
+        for section in list(body["content"]):
+            session.apply(operation(op="delete", id=section["id"]))
+    session.apply(
+        operation(
+            op="update_styles",
+            id=body["id"],
+            styles={"backgroundColor": design.background, "color": design.text, "fontFamily": design.body_font},
+        )
+    )
+
+
 def _format_validation_error(error: ValidationError) -> str:
     issues = []
     for issue in error.errors():
@@ -397,23 +509,24 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
         except ValidationError as error:
             raise ToolError(_format_validation_error(error)) from error
 
-        if isinstance(data, AddBlock):
-            block = templates.create_element(BLOCK_KINDS[data.kind])
-            if block is None:
-                raise ToolError(f'Unknown block "{data.kind}".')
-            body = session.elements[0]
-            index = None
-            if data.after_id == "top":
-                index = 0
-            elif data.after_id and data.after_id != "body":
-                anchor = _resolve(session, data.after_id)
-                section = top_level_ancestor(session.elements, anchor["id"])
-                ids = [s["id"] for s in body["content"]]
-                index = ids.index(section["id"]) + 1 if section and section["id"] in ids else None
-            session.apply(operation(op="insert", parentId=body["id"], index=index, element=block))
+        if isinstance(data, StartPage):
+            _start_page(session, data)
             return done(
-                f"Added the {data.kind} block:\n{session.serialize([block])}",
-                f"Added {block.get('name') or data.kind} section",
+                "Design set. Add the page's sections with add_section, in order from top to bottom.",
+                "Set up the page design",
+            )
+
+        if isinstance(data, AddSection):
+            problem = sections.validate(data)
+            if problem:
+                raise ToolError(problem)
+            index = _section_index(session, data.position)
+            design = session.design or infer_design(session.elements)
+            section = sections.render_section(data, design)
+            session.apply(operation(op="insert", parentId="__body", index=index, element=section))
+            return done(
+                f"Added the {data.kind} section:\n{session.serialize([section], styles=False)}",
+                f"Added {section['name']} section",
             )
 
         if isinstance(data, AddElement):

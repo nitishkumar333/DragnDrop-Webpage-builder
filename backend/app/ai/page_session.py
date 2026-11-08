@@ -11,6 +11,7 @@ import json
 import re
 from typing import Any
 
+from .design import Design
 from .operations import Element, Operation, apply_operation, is_container, walk
 
 # Style values every element carries by default; omitted to save tokens.
@@ -45,6 +46,8 @@ class PageSession:
     def __init__(self, elements: list[Element]):
         self.elements = elements
         self.operations: list[Operation] = []
+        # Set by start_page; otherwise new sections read the design from the page.
+        self.design: Design | None = None
         self._to_short: dict[str, str] = {}
         self._to_real: dict[str, str] = {}
         for el in walk(elements):
@@ -95,18 +98,20 @@ class PageSession:
         """A short human label for status messages."""
         return el.get("name") or el.get("type") or "element"
 
-    def serialize(self, elements: list[Element] | None = None, depth: int = 0) -> str:
+    def serialize(
+        self, elements: list[Element] | None = None, depth: int = 0, *, styles: bool = True
+    ) -> str:
         """One line per element, indented by depth."""
         lines: list[str] = []
         for el in self.elements if elements is None else elements:
-            lines.append(self._describe(el, depth))
+            lines.append(self._describe(el, depth, styles))
             if is_container(el):
-                children = self.serialize(el["content"], depth + 1)
+                children = self.serialize(el["content"], depth + 1, styles=styles)
                 if children:
                     lines.append(children)
         return "\n".join(lines)
 
-    def _describe(self, el: Element, depth: int) -> str:
+    def _describe(self, el: Element, depth: int, include_styles: bool = True) -> str:
         indent = "  " * depth
         parts = [f"{indent}[{self.short_id(el['id'])}] {el.get('type')}"]
         content = el.get("content")
@@ -125,6 +130,8 @@ class PageSession:
                 parts.append("src=" + _quote(_truncate(str(content["src"]), 200)))
             if content.get("alt"):
                 parts.append("alt=" + _quote(_truncate(str(content["alt"]), 120)))
+        if not include_styles:
+            return " ".join(parts)
         styles = []
         for key, value in (el.get("styles") or {}).items():
             if value is None or value == "":
