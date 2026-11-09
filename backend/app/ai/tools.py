@@ -4,6 +4,7 @@ The definitions are plain JSON Schema shared by every provider; each provider
 adapts them to its own format.
 """
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -11,24 +12,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
-from . import templates
+from . import photos, sections, templates
+from .design import CORNERS, font_value, infer_design, is_hex, make_design, normalize_hex
 from .operations import find_element, find_parent, merge_styles, operation, top_level_ancestor
 from .page_session import PageSession
+from .sections import SAFE_HREF as _SAFE_HREF
+from .sections import SAFE_SRC as _SAFE_SRC
+from .sections import AddSection
 
 # ---------------------------------------------------------------------------
 # Vocabulary
 # ---------------------------------------------------------------------------
-
-BLOCK_KINDS = {
-    "navbar": "navbar",
-    "hero": "hero",
-    "features": "features",
-    "testimonial": "testimonial",
-    "pricing": "pricing",
-    "cta": "cta",
-    "footer": "footer",
-    "gallery": "grid",
-}
 
 ELEMENT_KINDS = {
     "heading": "heading",
@@ -114,24 +108,95 @@ def _object(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
     }
 
 
+_COLOR = 'A hex color such as "#1d4ed8".'
+
+_SECTION_ITEM = _object(
+    {
+        "title": {"type": "string", "description": "Name, title, question, plan, link column or label."},
+        "text": {"type": "string", "description": "Description, answer, quote or image description."},
+        "value": {"type": "string", "description": 'A stat\'s number, a plan\'s price ("$29/mo") or a person\'s role.'},
+        "icon": {"type": "string", "description": "One emoji for a features item, otherwise empty."},
+        "href": {"type": "string", "description": "Link target for navbar links and pricing buttons, otherwise empty."},
+        "points": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "A pricing plan's features or a footer column's links, otherwise empty.",
+        },
+        "highlighted": {"type": "boolean", "description": "True for the one recommended pricing plan."},
+    },
+    ["title", "text", "value", "icon", "href", "points", "highlighted"],
+)
+
 TOOLS: list[ToolDefinition] = [
     ToolDefinition(
-        "add_block",
-        "Insert a pre-designed, fully editable section into the page body. Blocks: navbar "
-        "(logo + links + button), hero (headline, subtext, two buttons, image), features (3 "
-        "feature cards), testimonial (quote card on dark background), pricing (3 plans), cta "
-        "(call-to-action banner), footer (columns of links + copyright), gallery (grid of "
-        "images). The result lists the new block's elements with their ids so you can then "
-        "customize its text and styles.",
+        "start_page",
+        "Choose the design for a new or redesigned page: palette, fonts and corners. Sets the page "
+        "background and font, and optionally removes the existing sections. Call it once, before "
+        "the first add_section, when building a whole page. Not needed to add a section to a page.",
         _object(
             {
-                "kind": {"type": "string", "enum": list(BLOCK_KINDS)},
-                "after_id": {
-                    "type": "string",
-                    "description": 'Insert after the top-level section that contains this element. Use "top" to insert at the very top of the page. Omit to append at the end.',
+                "accent": {"type": "string", "description": _COLOR + " Buttons and highlights."},
+                "background": {"type": "string", "description": _COLOR + " The page background."},
+                "surface": {"type": "string", "description": _COLOR + " Card background."},
+                "text": {"type": "string", "description": _COLOR + " Headings and main text."},
+                "muted": {"type": "string", "description": _COLOR + " Secondary text."},
+                "heading_font": {"type": "string", "enum": [f["label"] for f in templates.fonts()]},
+                "body_font": {"type": "string", "enum": [f["label"] for f in templates.fonts()]},
+                "corners": {"type": "string", "enum": list(CORNERS), "description": "How rounded cards and buttons are."},
+                "replace_existing": {
+                    "type": "boolean",
+                    "description": "Delete every existing section first. Only when the user asked for a new page or redesign, or the page is empty.",
                 },
             },
-            ["kind"],
+            ["accent", "background", "surface", "text", "muted", "heading_font", "body_font", "corners", "replace_existing"],
+        ),
+    ),
+    ToolDefinition(
+        "add_section",
+        "Add a complete, professionally laid out section using the page's design. You write the "
+        "content; layout, spacing and colors are handled for you. Use empty strings and empty "
+        "lists for fields a section doesn't use.\n"
+        "Kinds: navbar (heading=brand, items=links, primary button); hero (variant centered or "
+        "split, eyebrow, heading, subheading, two buttons, image); logos (heading=caption, "
+        "items=company names); stats (items with value and title); features (variant cards or "
+        "columns; items with icon, title, text); split (image beside text; variant image_left or "
+        "image_right; items=bullet points); steps (numbered items); testimonials (items with text "
+        "as the quote, title as the name, value as the role); pricing (items with title, value, "
+        "text, points, highlighted; primary_label is each plan's button); faq (items with title "
+        "as the question, text as the answer); gallery (items with title, text describing the "
+        "image); team (items with title, value, text); cta (heading, subheading, buttons); contact "
+        "(a contact form, with items as contact details); footer (heading=brand, subheading=tagline, "
+        "items=link columns with title and points).",
+        _object(
+            {
+                "kind": {"type": "string", "enum": list(sections.SECTION_KINDS)},
+                "variant": {"type": "string", "enum": list(sections.VARIANTS), "description": 'Layout option, or "auto".'},
+                "background": {
+                    "type": "string",
+                    "enum": list(sections.BACKGROUNDS),
+                    "description": 'default = page background, alt = subtle tint, dark and accent = bold bands. "auto" picks a sensible one.',
+                },
+                "position": {
+                    "type": "string",
+                    "description": '"end", "top", or the id of an element: the section goes after the top-level section containing it.',
+                },
+                "eyebrow": {"type": "string", "description": "A short label above the heading."},
+                "heading": {"type": "string"},
+                "subheading": {"type": "string"},
+                "primary_label": {"type": "string"},
+                "primary_href": {"type": "string"},
+                "secondary_label": {"type": "string"},
+                "secondary_href": {"type": "string"},
+                "image": {
+                    "type": "string",
+                    "description": 'A short description of the photo, used as a stock photo search ("barista pouring latte art"), or an https URL the user gave you. Used by hero and split.',
+                },
+                "items": {"type": "array", "items": _SECTION_ITEM},
+            },
+            [
+                "kind", "variant", "background", "position", "eyebrow", "heading", "subheading",
+                "primary_label", "primary_href", "secondary_label", "secondary_href", "image", "items",
+            ],
         ),
     ),
     ToolDefinition(
@@ -215,6 +280,19 @@ TOOLS: list[ToolDefinition] = [
         "Returns the copy's ids.",
         _object({"id": {"type": "string", "description": _ID}}, ["id"]),
     ),
+    ToolDefinition(
+        "find_photos",
+        "Search Unsplash stock photos, to replace an existing image or add a new one. Returns photo "
+        "URLs to use as update_content's src field or in a backgroundImage url(). add_section finds photos by itself, so this "
+        "isn't needed for new sections.",
+        _object(
+            {
+                "query": {"type": "string", "description": 'What the photo shows, in a few plain words, e.g. "barista pouring latte art".'},
+                "orientation": {"type": "string", "enum": ["landscape", "portrait", "square"]},
+            },
+            ["query", "orientation"],
+        ),
+    ),
 ]
 
 # ---------------------------------------------------------------------------
@@ -229,9 +307,16 @@ class StyleDecl(BaseModel):
     value: str = Field(max_length=500)
 
 
-class AddBlock(BaseModel):
-    kind: Literal[tuple(BLOCK_KINDS)]  # type: ignore[valid-type]
-    after_id: str | None = None
+class StartPage(BaseModel):
+    accent: str
+    background: str
+    surface: str
+    text: str
+    muted: str
+    heading_font: str
+    body_font: str
+    corners: Literal[tuple(CORNERS)] = "soft"  # type: ignore[valid-type]
+    replace_existing: bool = False
 
 
 class AddElement(BaseModel):
@@ -272,7 +357,8 @@ class DuplicateElement(BaseModel):
 
 
 INPUT_MODELS: dict[str, type[BaseModel]] = {
-    "add_block": AddBlock,
+    "start_page": StartPage,
+    "add_section": AddSection,
     "add_element": AddElement,
     "update_styles": UpdateStyles,
     "update_content": UpdateContent,
@@ -293,8 +379,6 @@ class ToolError(Exception):
 _UNSAFE_CSS = re.compile(r"[<>{}]|javascript:|expression\s*\(|@import|behavior\s*:", re.I)
 _URL = re.compile(r"url\(([^)]*)\)", re.I)
 _NUMBER = re.compile(r"^-?\d+(\.\d+)?$")
-_SAFE_HREF = re.compile(r"^(https?://|mailto:|tel:|#|/(?!/))", re.I)
-_SAFE_SRC = re.compile(r"^https?://", re.I)
 _YOUTUBE = re.compile(r"(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/)([\w-]{11})")
 
 
@@ -321,11 +405,26 @@ def sanitize_style_value(prop: str, raw: str) -> str:
     return value
 
 
-def style_record(styles: list[StyleDecl]) -> dict[str, str]:
-    return {
+IMAGE_SOURCE_ERROR = (
+    "Images may only come from find_photos, a https://placehold.co placeholder, or a URL the user "
+    "gave you. Never invent an image URL or generate an image."
+)
+
+
+def _check_image_source(session: PageSession, url: str) -> None:
+    if not session.image_source_allowed(url):
+        raise ToolError(IMAGE_SOURCE_ERROR)
+
+
+def style_record(session: PageSession, styles: list[StyleDecl]) -> dict[str, str]:
+    record = {
         s.property: "" if s.value == "" else sanitize_style_value(s.property, s.value)
         for s in styles
     }
+    for value in record.values():
+        for inner in _URL.findall(value):
+            _check_image_source(session, inner.strip().strip("'\""))
+    return record
 
 
 # ---------------------------------------------------------------------------
@@ -374,6 +473,50 @@ def _index_after(session: PageSession, parent, after_id: str | None) -> int | No
     raise ToolError(f'"{after_id}" is not a direct child of the given parent.')
 
 
+def _section_index(session: PageSession, position: str) -> int | None:
+    """Where a new top-level section goes; None appends."""
+    position = position.strip()
+    if position == "top":
+        return 0
+    if position in ("", "end", "body"):
+        # The end of the page, but above the photo credits line.
+        children = session.elements[0]["content"]
+        return next((i for i, s in enumerate(children) if s.get("name") == sections.CREDITS_NAME), None)
+    anchor = _resolve(session, position)
+    section = top_level_ancestor(session.elements, anchor["id"])
+    ids = [s["id"] for s in session.elements[0]["content"]]
+    return ids.index(section["id"]) + 1 if section and section["id"] in ids else None
+
+
+def _start_page(session: PageSession, data: StartPage) -> None:
+    colors = {}
+    for field in ("accent", "background", "surface", "text", "muted"):
+        value = getattr(data, field)
+        if not is_hex(value):
+            raise ToolError(f'{field} must be a hex color like "#1d4ed8", not {json.dumps(value)}.')
+        colors[field] = normalize_hex(value)
+    fonts = {}
+    for field in ("heading_font", "body_font"):
+        fonts[field] = font_value(getattr(data, field))
+        if fonts[field] is None:
+            available = ", ".join(f["label"] for f in templates.fonts())
+            raise ToolError(f'{field} "{getattr(data, field)}" is not available. Use one of: {available}.')
+
+    design = make_design(**colors, **fonts, corners=data.corners)
+    session.design = design
+    body = session.elements[0]
+    if data.replace_existing:
+        for section in list(body["content"]):
+            session.apply(operation(op="delete", id=section["id"]))
+    session.apply(
+        operation(
+            op="update_styles",
+            id=body["id"],
+            styles={"backgroundColor": design.background, "color": design.text, "fontFamily": design.body_font},
+        )
+    )
+
+
 def _format_validation_error(error: ValidationError) -> str:
     issues = []
     for issue in error.errors():
@@ -397,24 +540,29 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
         except ValidationError as error:
             raise ToolError(_format_validation_error(error)) from error
 
-        if isinstance(data, AddBlock):
-            block = templates.create_element(BLOCK_KINDS[data.kind])
-            if block is None:
-                raise ToolError(f'Unknown block "{data.kind}".')
-            body = session.elements[0]
-            index = None
-            if data.after_id == "top":
-                index = 0
-            elif data.after_id and data.after_id != "body":
-                anchor = _resolve(session, data.after_id)
-                section = top_level_ancestor(session.elements, anchor["id"])
-                ids = [s["id"] for s in body["content"]]
-                index = ids.index(section["id"]) + 1 if section and section["id"] in ids else None
-            session.apply(operation(op="insert", parentId=body["id"], index=index, element=block))
+        if isinstance(data, StartPage):
+            _start_page(session, data)
             return done(
-                f"Added the {data.kind} block:\n{session.serialize([block])}",
-                f"Added {block.get('name') or data.kind} section",
+                "Design set. Add the page's sections with add_section, in order from top to bottom.",
+                "Set up the page design",
             )
+
+        if isinstance(data, AddSection):
+            problem = sections.validate(data)
+            if problem:
+                raise ToolError(problem)
+            for source in sections.image_urls(data):
+                _check_image_source(session, source)
+            index = _section_index(session, data.position)
+            design = session.design or infer_design(session.elements)
+            section = sections.render_section(data, design, session.photos_by_description)
+            session.apply(operation(op="insert", parentId="__body", index=index, element=section))
+            result = f"Added the {data.kind} section:\n{session.serialize([section], styles=False)}"
+            if photos.configured():
+                missing = [d for d in sections.photo_requests(data) if d not in session.photos_by_description]
+                if missing:
+                    result += "\nNo stock photo was available, so these are labeled placeholders: " + "; ".join(missing)
+            return done(result, f"Added {section['name']} section")
 
         if isinstance(data, AddElement):
             parent = _resolve_container(session, data.parent_id)
@@ -429,7 +577,7 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
             ):
                 element["content"] = {**element["content"], "innerText": data.text}
             if data.styles:
-                element["styles"] = merge_styles(element.get("styles") or {}, style_record(data.styles))
+                element["styles"] = merge_styles(element.get("styles") or {}, style_record(session, data.styles))
             session.apply(operation(op="insert", parentId=parent["id"], index=index, element=element))
             return done(
                 f"Added:\n{session.serialize([element])}",
@@ -438,7 +586,7 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
 
         if isinstance(data, UpdateStyles):
             targets = [_resolve(session, i) for i in dict.fromkeys(data.ids)]
-            styles = style_record(data.styles)
+            styles = style_record(session, data.styles)
             for el in targets:
                 session.apply(operation(op="update_styles", id=el["id"], styles=styles))
             what = session.label(targets[0]) if len(targets) == 1 else _plural(len(targets), "element")
@@ -468,6 +616,8 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
                     if not _SAFE_SRC.match(value.strip()):
                         raise ToolError("src must be an http(s) URL.")
                     src = value.strip()
+                    if el.get("type") == "image":
+                        _check_image_source(session, src)
                     content["src"] = to_youtube_embed(src) if el.get("type") == "video" else src
                 elif item.field == "alt":
                     content["alt"] = value
@@ -518,3 +668,105 @@ def execute_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome
         raise ToolError(f'Unknown tool "{name}".')
     except ToolError as error:
         return ToolOutcome(str(error), True, len(session.operations) - before)
+
+
+# ---------------------------------------------------------------------------
+# Tools that use the network
+# ---------------------------------------------------------------------------
+
+
+class FindPhotos(BaseModel):
+    query: str = Field(min_length=1, max_length=200)
+    orientation: Literal["landscape", "portrait", "square"] = "landscape"
+
+
+async def _fetch_section_photos(session: PageSession, raw_input: Any) -> None:
+    """Find a photo for each image in the section, avoiding any already used on this page."""
+    if not photos.configured():
+        return
+    try:
+        spec = AddSection.model_validate(raw_input if raw_input is not None else {})
+    except ValidationError:
+        return  # execute_tool reports this to the model
+    if sections.validate(spec):
+        return
+    missing = [d for d in sections.photo_requests(spec) if d not in session.photos_by_description]
+    results = await asyncio.gather(*(photos.search(d) for d in missing))
+    for description, found in zip(missing, results):
+        photo = next((p for p in found if p.url not in session.photos_by_url), None)
+        if photo:
+            session.photos_by_url[photo.url] = photo
+            session.photos_by_description[description] = photo
+
+
+async def _find_photos(session: PageSession, raw_input: Any) -> ToolOutcome:
+    try:
+        data = FindPhotos.model_validate(raw_input if raw_input is not None else {})
+    except ValidationError as error:
+        return ToolOutcome(_format_validation_error(error), True, 0)
+    if not photos.configured():
+        return ToolOutcome(
+            "Photo search isn't set up on this server. Tell the user it needs a free Unsplash access key "
+            "(UNSPLASH_ACCESS_KEY in .env), or ask them for an image URL.",
+            True,
+            0,
+        )
+    found = await photos.search(data.query, data.orientation)
+    results = [p for p in found if p.url not in session.photos_by_url][:5]
+    if not results:
+        return ToolOutcome(
+            f'No photos available for "{data.query}" right now. Try different words, or ask the user for an image URL.',
+            True,
+            0,
+        )
+    lines = []
+    for photo in results:
+        # Recorded so the photographer is credited if the photo ends up on the page.
+        session.photos_by_url[photo.url] = photo
+        lines.append(f"{photo.url} ({photo.alt or 'no description'})")
+    return ToolOutcome("Photos, best match first:\n" + "\n".join(lines), False, 0)
+
+
+def _update_credits_block(session: PageSession) -> None:
+    """Keep the page's "Photos by … on Unsplash" line in step with the photos on it."""
+    credits = session.photo_credits()
+    if not credits:
+        return
+    body = session.elements[0]
+    block = next((s for s in body["content"] if s.get("name") == sections.CREDITS_NAME), None)
+    design = session.design or infer_design(session.elements)
+    if block is None:
+        element = sections.photo_credits_block(design, credits, photos.unsplash_url())
+        session.apply(operation(op="insert", parentId=body["id"], element=element))
+        return
+    row = next((c for c in block["content"] if isinstance(c.get("content"), list)), None)
+    if row is None:
+        return
+    credited = {c["content"].get("href") for c in row["content"] if c.get("type") == "link"}
+    for credit in credits:
+        if credit["url"] not in credited:
+            link = sections.credit_link(design, credit["name"], credit["url"])
+            # Before "on Unsplash", the row's last two children.
+            index = max(len(row["content"]) - 2, 0)
+            session.apply(operation(op="insert", parentId=row["id"], index=index, element=link))
+
+
+async def _after_tool(session: PageSession) -> None:
+    """What Unsplash asks for once a photo is in use: credit it and report the download."""
+    _update_credits_block(session)
+    new = [p for p in session.photos_on_page() if p.id not in session.tracked_photos]
+    session.tracked_photos.update(p.id for p in new)
+    await asyncio.gather(*(photos.track_download(p) for p in new))
+
+
+async def run_tool(session: PageSession, name: str, raw_input: Any) -> ToolOutcome:
+    """Run a tool call, doing any network work around it (execute_tool itself never waits)."""
+    if name == "find_photos":
+        return await _find_photos(session, raw_input)
+    if name == "add_section":
+        await _fetch_section_photos(session, raw_input)
+    outcome = execute_tool(session, name, raw_input)
+    before = len(session.operations)
+    await _after_tool(session)
+    outcome.operation_count += len(session.operations) - before
+    return outcome

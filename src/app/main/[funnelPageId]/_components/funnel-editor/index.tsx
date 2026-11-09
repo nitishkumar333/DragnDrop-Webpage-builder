@@ -7,6 +7,7 @@ import { EditorElement, useEditor } from "@/providers/editor/editor-provider";
 import clsx from "clsx";
 import { EyeOff } from "lucide-react";
 import React, { useEffect, useMemo } from "react";
+import BuildOverlay from "./funnel-editor-components/build-overlay";
 import Recursive from "./funnel-editor-components/recursive";
 
 type Props = { funnelPageId: string; liveMode?: boolean };
@@ -94,10 +95,24 @@ const FunnelEditor = ({ funnelPageId, liveMode }: Props) => {
 
   const isPreviewing = editor.previewMode || editor.liveMode;
 
+  // Scrolling still works while the AI builds, but nothing on the canvas can be
+  // clicked or dropped on.
+  const blockWhileBuilding = (e: React.SyntheticEvent) => {
+    if (!editor.building) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   return (
     <div
+      data-canvas-root
+      data-building={editor.building || undefined}
+      data-live={editor.liveMode || undefined}
+      onClickCapture={blockWhileBuilding}
+      onDragOverCapture={blockWhileBuilding}
+      onDropCapture={blockWhileBuilding}
       className={clsx(
-        "use-automation-zoom-in h-full bg-white text-left text-slate-900 transition-all [color-scheme:light]",
+        "use-automation-zoom-in relative h-full bg-white text-left text-slate-900 transition-all [color-scheme:light]",
         {
           "mr-[385px] rounded-md shadow-2xl ring-1 ring-black/5": !isPreviewing,
           "!mr-0": isPreviewing,
@@ -122,6 +137,7 @@ const FunnelEditor = ({ funnelPageId, liveMode }: Props) => {
       {editor.elements.map((childElement) => (
         <Recursive key={childElement.id} element={childElement} />
       ))}
+      {editor.building && <BuildOverlay />}
     </div>
   );
 };

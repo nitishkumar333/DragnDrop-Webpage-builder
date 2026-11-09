@@ -25,9 +25,16 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import type { AiChat, ChatMessage } from "./use-ai-chat";
 
+const EMPTY_PAGE_SUGGESTIONS = [
+  "Build a landing page for a specialty coffee roaster in Portland",
+  "Create a portfolio site for a wedding photographer",
+  "Make a homepage for a family-run Italian restaurant",
+  "Design a landing page for a time-tracking app, with pricing",
+];
+
 const PAGE_SUGGESTIONS = [
-  "Build a landing page for a specialty coffee shop",
   "Add a pricing section after the features",
+  "Add a testimonials section with three customer quotes",
   "Switch every font to Playfair Display",
   "Give the page a dark theme with a violet accent",
 ];
@@ -59,7 +66,16 @@ const AssistantMessage = ({ message, chat }: { message: ChatMessage; chat: AiCha
       {working && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          {steps.length ? "Working…" : "Thinking…"}
+          {chat.animating ? "Building…" : steps.length ? "Working…" : "Thinking…"}
+          {chat.animating && (
+            <button
+              type="button"
+              className="ml-auto underline underline-offset-2 hover:text-foreground"
+              onClick={chat.skipAnimation}
+            >
+              Skip animation
+            </button>
+          )}
         </div>
       )}
       {message.content && (
@@ -73,6 +89,28 @@ const AssistantMessage = ({ message, chat }: { message: ChatMessage; chat: AiCha
             <AlertCircle className="mr-1 inline h-3.5 w-3.5 align-[-2px]" />
           )}
           {message.content}
+        </p>
+      )}
+      {!working && !message.reverted && !!message.photoCredits?.length && (
+        <p className="text-[11px] text-muted-foreground">
+          Photos by{" "}
+          {message.photoCredits.map((credit, i) => (
+            <React.Fragment key={credit.url}>
+              {i > 0 && ", "}
+              <a href={credit.url} target="_blank" rel="noreferrer" className="underline">
+                {credit.name}
+              </a>
+            </React.Fragment>
+          ))}{" "}
+          on{" "}
+          <a
+            href="https://unsplash.com/?utm_source=webpage_builder&utm_medium=referral"
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium underline"
+          >
+            Unsplash
+          </a>
         </p>
       )}
       {!working && message.modelLabel && (message.changeCount ?? 0) === 0 && (
@@ -127,7 +165,15 @@ const AiTab = ({ chat }: Props) => {
     setInput("");
   };
 
-  const suggestions = hasSelection ? SELECTION_SUGGESTIONS : PAGE_SUGGESTIONS;
+  const pageIsEmpty =
+    !hasSelection &&
+    Array.isArray(state.editor.elements[0]?.content) &&
+    state.editor.elements[0].content.length === 0;
+  const suggestions = hasSelection
+    ? SELECTION_SUGGESTIONS
+    : pageIsEmpty
+      ? EMPTY_PAGE_SUGGESTIONS
+      : PAGE_SUGGESTIONS;
 
   return (
     <div className="flex h-full flex-col">
@@ -182,7 +228,9 @@ const AiTab = ({ chat }: Props) => {
             <p className="text-sm text-muted-foreground">
               {hasSelection
                 ? "Ask for a change to the selected element, or the whole page."
-                : "Ask for a new section, a new look, or new copy. Select an element first to change just that."}
+                : pageIsEmpty
+                  ? "Describe your business or idea and the assistant will build the whole page."
+                  : "Ask for a new section, a new look, or new copy. Select an element first to change just that."}
             </p>
             <div className="flex flex-col gap-2">
               {suggestions.map((s) => (
@@ -246,7 +294,11 @@ const AiTab = ({ chat }: Props) => {
             rows={3}
             maxLength={4000}
             placeholder={
-              hasSelection ? "e.g. make this a pill-shaped button" : "e.g. add a testimonial section"
+              hasSelection
+                ? "e.g. make this a pill-shaped button"
+                : pageIsEmpty
+                  ? "e.g. a landing page for my yoga studio"
+                  : "e.g. add a testimonial section"
             }
             className="resize-none pr-12 text-sm"
           />

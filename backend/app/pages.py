@@ -60,6 +60,7 @@ class PageStore(Protocol):
     async def get_page(self, page_id: str) -> dict[str, Any] | None: ...
     async def create_page(self, page_id: str, name: str) -> None: ...
     async def save_content(self, page_id: str, content: str) -> None: ...
+    async def delete_page(self, page_id: str) -> bool: ...
 
 
 class MongoPageStore:
@@ -96,6 +97,11 @@ class MongoPageStore:
             {"id": page_id}, {"$set": {"content": content, "updatedAt": _now()}}
         )
 
+    async def delete_page(self, page_id):
+        collection = await db.get_collection()
+        result = await collection.delete_one({"id": page_id})
+        return result.deleted_count > 0
+
 
 class MemoryPageStore:
     """In-process store for tests and for running without a database (PAGES_STORE=memory)."""
@@ -128,6 +134,9 @@ class MemoryPageStore:
         if page_id in self.pages:
             self.pages[page_id]["content"] = content
             self.pages[page_id]["updatedAt"] = _now()
+
+    async def delete_page(self, page_id):
+        return self.pages.pop(page_id, None) is not None
 
 
 def create_store() -> PageStore:
@@ -165,4 +174,11 @@ async def save_page(funnel_page_id: str, request: Request, body: Any = Body(defa
     if body is None:
         raise HTTPException(400, "Page content is required.")
     await _store(request).save_content(funnel_page_id, serialize_content(body))
+    return {"result": True}
+
+
+@router.delete("/{funnel_page_id}")
+async def delete_page(funnel_page_id: str, request: Request):
+    if not await _store(request).delete_page(funnel_page_id):
+        raise HTTPException(404, "Page not found.")
     return {"result": True}

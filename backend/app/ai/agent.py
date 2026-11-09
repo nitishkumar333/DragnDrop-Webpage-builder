@@ -4,13 +4,14 @@ import json
 from typing import Any, AsyncIterator
 
 from .operations import Element, find_element
-from .page_session import PageSession
+from .page_session import PageSession, urls_in_text
 from .prompt import SYSTEM_PROMPT
 from .providers import ChatTurn, Provider, ProviderError
 from .providers.base import ToolResult
-from .tools import TOOLS, execute_tool
+from .tools import TOOLS, run_tool
 
-MAX_TURNS = 12
+# Enough for a full page built one section per turn, plus some follow-up edits.
+MAX_TURNS = 20
 MAX_OPERATIONS = 400
 
 
@@ -49,6 +50,7 @@ async def run_agent(
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield stream events: `operations` while working, then `done` or `error`."""
     session = PageSession(elements)
+    session.user_urls = urls_in_text(prompt)
     conversation = provider.start(
         system=SYSTEM_PROMPT,
         tools=TOOLS,
@@ -81,7 +83,7 @@ async def run_agent(
                     )
                     continue
                 start = len(session.operations)
-                outcome = execute_tool(session, call.name, call.arguments)
+                outcome = await run_tool(session, call.name, call.arguments)
                 results.append(ToolResult(call, outcome.result, outcome.is_error))
                 if outcome.operation_count > 0:
                     event: dict[str, Any] = {
@@ -102,10 +104,14 @@ async def run_agent(
         yield {"type": "error", "message": str(error)}
         return
 
-    yield {
+    done: dict[str, Any] = {
         "type": "done",
         "message": reply or "Done.",
         "changeCount": len(session.operations),
         "provider": provider.id,
         "model": provider.model(),
     }
+    credits = session.photo_credits()
+    if credits:
+        done["photoCredits"] = credits
+    yield done

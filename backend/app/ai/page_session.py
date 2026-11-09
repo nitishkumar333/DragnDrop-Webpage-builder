@@ -11,7 +11,9 @@ import json
 import re
 from typing import Any
 
+from .design import Design
 from .operations import Element, Operation, apply_operation, is_container, walk
+from .photos import Photo
 
 # Style values every element carries by default; omitted to save tokens.
 DEFAULT_STYLE_VALUES = {
@@ -23,6 +25,12 @@ DEFAULT_STYLE_VALUES = {
 }
 _SPACING_KEY = re.compile(r"^(margin|padding)(Top|Right|Bottom|Left)?$")
 _ZERO = re.compile(r"^0(px)?$")
+PLACEHOLDER_HOST = "https://placehold.co/"
+_URL_IN_TEXT = re.compile(r"https?://[^\s<>\"')\]]+", re.I)
+
+
+def urls_in_text(text: str) -> set[str]:
+    return {url.rstrip(".,;:!?") for url in _URL_IN_TEXT.findall(text)}
 
 
 def _truncate(value: str, limit: int) -> str:
@@ -41,10 +49,26 @@ def _css_value(value: Any) -> str:
     return str(value)
 
 
+def _image_texts(el: Element) -> list[str]:
+    """An element's image src and background image, where it has them."""
+    content = el.get("content")
+    src = content.get("src") if isinstance(content, dict) else None
+    background = (el.get("styles") or {}).get("backgroundImage")
+    return [text for text in (src, background) if isinstance(text, str) and text]
+
+
 class PageSession:
     def __init__(self, elements: list[Element]):
         self.elements = elements
         self.operations: list[Operation] = []
+        # Set by start_page; otherwise new sections read the design from the page.
+        self.design: Design | None = None
+        # Stock photos fetched during this request.
+        self.photos_by_description: dict[str, Photo] = {}
+        self.photos_by_url: dict[str, Photo] = {}
+        self.tracked_photos: set[str] = set()
+        self.original_images = [text for el in walk(elements) for text in _image_texts(el)]
+        self.user_urls: set[str] = set()
         self._to_short: dict[str, str] = {}
         self._to_real: dict[str, str] = {}
         for el in walk(elements):
@@ -90,23 +114,53 @@ class PageSession:
         apply_operation(self.elements, op)
         self.operations.append(op)
 
+    def photos_on_page(self) -> list[Photo]:
+        """This request's stock photos that are on the page, in page order."""
+        found: dict[str, Photo] = {}
+        for el in walk(self.elements):
+            for text in _image_texts(el):
+                for url, photo in self.photos_by_url.items():
+                    if url in text:
+                        found.setdefault(photo.id, photo)
+        return list(found.values())
+
+    def photo_credits(self) -> list[dict[str, str]]:
+        """The photographers to credit, without duplicates."""
+        credits: dict[str, str] = {}
+        for photo in self.photos_on_page():
+            credits.setdefault(photo.photographer, photo.photographer_url)
+        return [{"name": name, "url": url} for name, url in credits.items()]
+
+    def image_source_allowed(self, url: str) -> bool:
+        """Images may only come from Unsplash results, placeholders, the page as it
+        was, or a URL the user typed. A model can't invent or generate an image."""
+        url = url.strip()
+        return (
+            url in self.photos_by_url
+            or url.startswith(PLACEHOLDER_HOST)
+            or url in self.user_urls
+            or any(url in text for text in self.original_images)
+        )
+
     @staticmethod
     def label(el: Element) -> str:
         """A short human label for status messages."""
         return el.get("name") or el.get("type") or "element"
 
-    def serialize(self, elements: list[Element] | None = None, depth: int = 0) -> str:
+    def serialize(
+        self, elements: list[Element] | None = None, depth: int = 0, *, styles: bool = True
+    ) -> str:
         """One line per element, indented by depth."""
         lines: list[str] = []
         for el in self.elements if elements is None else elements:
-            lines.append(self._describe(el, depth))
+            lines.append(self._describe(el, depth, styles))
             if is_container(el):
-                children = self.serialize(el["content"], depth + 1)
+                children = self.serialize(el["content"], depth + 1, styles=styles)
                 if children:
                     lines.append(children)
         return "\n".join(lines)
 
-    def _describe(self, el: Element, depth: int) -> str:
+    def _describe(self, el: Element, depth: int, include_styles: bool = True) -> str:
         indent = "  " * depth
         parts = [f"{indent}[{self.short_id(el['id'])}] {el.get('type')}"]
         content = el.get("content")
@@ -125,6 +179,8 @@ class PageSession:
                 parts.append("src=" + _quote(_truncate(str(content["src"]), 200)))
             if content.get("alt"):
                 parts.append("alt=" + _quote(_truncate(str(content["alt"]), 120)))
+        if not include_styles:
+            return " ".join(parts)
         styles = []
         for key, value in (el.get("styles") or {}).items():
             if value is None or value == "":

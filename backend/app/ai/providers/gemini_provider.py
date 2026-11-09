@@ -59,7 +59,8 @@ class GeminiConversation(Conversation):
             ],
             # We run the tools ourselves.
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-            max_output_tokens=8192,
+            # Thinking counts toward this limit, and a turn can write several sections.
+            max_output_tokens=16384,
         )
         self.contents: list[types.Content] = [
             types.Content(

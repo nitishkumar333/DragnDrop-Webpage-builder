@@ -41,6 +41,8 @@ const FunnelEditorNavigation = ({ funnelPageDetails }: Props) => {
   const [isChecked, setChecked] = useState(theme !== "light");
   const [saving, setSaving] = useState(false);
   const isDirty = state.editor.elements !== state.savedElements;
+  // The page is only partly on the canvas until the AI's build finishes.
+  const { building } = state.editor;
 
   useEffect(() => {
     setTheme(isChecked ? "dark" : "light");
@@ -60,7 +62,7 @@ const FunnelEditorNavigation = ({ funnelPageDetails }: Props) => {
   };
 
   const handleOnSave = useCallback(async () => {
-    if (saving) return;
+    if (saving || building) return;
     setSaving(true);
     try {
       const res = await fetch(
@@ -79,7 +81,7 @@ const FunnelEditorNavigation = ({ funnelPageDetails }: Props) => {
     } finally {
       setSaving(false);
     }
-  }, [saving, funnelPageDetails?.id, state.editor.elements, dispatch]);
+  }, [saving, building, funnelPageDetails?.id, state.editor.elements, dispatch]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -92,7 +94,7 @@ const FunnelEditorNavigation = ({ funnelPageDetails }: Props) => {
         handleOnSave();
         return;
       }
-      if (isTypingTarget(e.target) || state.editor.previewMode) return;
+      if (isTypingTarget(e.target) || state.editor.previewMode || building) return;
 
       const selected = state.editor.selectedElement;
       const canEditSelection = !!selected.id && selected.type !== "__body";
@@ -121,7 +123,7 @@ const FunnelEditorNavigation = ({ funnelPageDetails }: Props) => {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [state.editor.selectedElement, state.editor.previewMode, dispatch, handleOnSave]);
+  }, [state.editor.selectedElement, state.editor.previewMode, building, dispatch, handleOnSave]);
 
   // Warn before leaving with unsaved changes.
   useEffect(() => {
@@ -188,12 +190,13 @@ const FunnelEditorNavigation = ({ funnelPageDetails }: Props) => {
           size={"icon"}
           title="Preview"
           className="hover:bg-slate-800"
+          disabled={building}
           onClick={handlePreviewClick}
         >
           <EyeIcon />
         </Button>
         <Button
-          disabled={!(state.history.currentIndex > 0)}
+          disabled={building || !(state.history.currentIndex > 0)}
           onClick={() => dispatch({ type: "UNDO" })}
           variant={"ghost"}
           size={"icon"}
@@ -203,7 +206,7 @@ const FunnelEditorNavigation = ({ funnelPageDetails }: Props) => {
           <Undo2 />
         </Button>
         <Button
-          disabled={!(state.history.currentIndex < state.history.history.length - 1)}
+          disabled={building || !(state.history.currentIndex < state.history.history.length - 1)}
           onClick={() => dispatch({ type: "REDO" })}
           variant={"ghost"}
           size={"icon"}
@@ -221,7 +224,7 @@ const FunnelEditorNavigation = ({ funnelPageDetails }: Props) => {
             View site <ExternalLink className="ml-2 h-4 w-4" />
           </a>
         </Button>
-        <Button onClick={handleOnSave} disabled={saving} title="Save (Ctrl+S)">
+        <Button onClick={handleOnSave} disabled={saving || building} title="Save (Ctrl+S)">
           {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Save
         </Button>

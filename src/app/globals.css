@@ -149,3 +149,72 @@ B (255 */
     transform: scale(1);
   }
 }
+
+/* The AI building the page (see lib/ai/build-player.ts). */
+[data-build-hidden] {
+  visibility: hidden !important;
+}
+
+/* Shows the page as a visitor would see it, and eases every style change. */
+[data-building] [data-element-id] {
+  pointer-events: none;
+  outline-color: transparent;
+  transition:
+    background-color 0.45s ease,
+    color 0.45s ease,
+    border-color 0.45s ease,
+    box-shadow 0.45s ease,
+    border-radius 0.35s ease,
+    opacity 0.35s ease,
+    padding 0.35s ease,
+    margin 0.35s ease,
+    gap 0.35s ease,
+    font-size 0.35s ease,
+    letter-spacing 0.35s ease,
+    width 0.35s ease,
+    max-width 0.35s ease,
+    height 0.35s ease;
+}
+
+[data-building] [data-canvas-body] {
+  transition:
+    background-color 0.45s ease,
+    color 0.45s ease;
+}
+
+/* An inline box with no width, so the caret can't change where lines wrap. */
+.build-caret {
+  position: relative;
+}
+
+.build-caret::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 1.15em;
+  background: currentColor;
+  animation: build-caret-blink 0.9s steps(1) infinite;
+}
+
+@keyframes build-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+[data-build-loading] {
+  background: linear-gradient(100deg, #e2e8f0 30%, #f8fafc 50%, #e2e8f0 70%) 0 0 / 200% 100%;
+  animation: build-shimmer 1.2s linear infinite;
+}
+
+[data-build-loading] img {
+  opacity: 0;
+}
+
+@keyframes build-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}

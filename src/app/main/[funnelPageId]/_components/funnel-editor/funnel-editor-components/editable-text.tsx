@@ -31,6 +31,7 @@ const EditableText = ({ element, as = "span", className, singleLine }: Props) =>
     as,
     {
       key: text,
+      "data-editable-text": true,
       contentEditable: true,
       suppressContentEditableWarning: true,
       spellCheck: false,

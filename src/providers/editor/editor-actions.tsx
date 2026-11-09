@@ -100,6 +100,10 @@ export type EditorAction =
       payload: { id: string | null };
     }
   | {
+      type: "SET_BUILDING";
+      payload: { building: boolean };
+    }
+  | {
       type: "CHANGE_DEVICE";
       payload: {
         device: DeviceTypes;

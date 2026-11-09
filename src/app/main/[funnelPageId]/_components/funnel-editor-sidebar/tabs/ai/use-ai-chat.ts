@@ -1,9 +1,12 @@
 "use client";
 import { EditorElement, useEditor } from "@/providers/editor/editor-provider";
-import type { AiChatTurn, AiProviderInfo, AiStreamEvent } from "@/lib/ai/types";
+import type { AiChatTurn, AiPhotoCredit, AiProviderInfo, AiStreamEvent } from "@/lib/ai/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 } from "uuid";
 import { apiUrl } from "@/lib/api";
+import { BuildPlayer } from "@/lib/ai/build-player";
+import { chatStorageKey } from "@/lib/ai/chat-storage";
+import { takeInitialAiPrompt } from "@/lib/ai/initial-prompt";
 
 export type ChatMessage = {
   id: string;
@@ -15,18 +18,16 @@ export type ChatMessage = {
   changeCount?: number;
   /** "Claude · claude-opus-5-5", shown under the reply. */
   modelLabel?: string;
+  photoCredits?: AiPhotoCredit[];
   /** The page right after this run, compared by reference to offer Undo. */
   resultElements?: EditorElement[];
   awaitingCapture?: boolean;
   reverted?: boolean;
 };
 
-const STORAGE_PREFIX = "ai-chat:";
 const MAX_STORED = 60;
 
 const PROVIDER_KEY = "ai-provider";
-
-const storageKey = (pageId: string) => `${STORAGE_PREFIX}${pageId}`;
 
 const readStoredProvider = () => {
   try {
@@ -38,7 +39,7 @@ const readStoredProvider = () => {
 
 const loadMessages = (pageId: string): ChatMessage[] => {
   try {
-    const raw = localStorage.getItem(storageKey(pageId));
+    const raw = localStorage.getItem(chatStorageKey(pageId));
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -57,8 +58,9 @@ const saveMessages = (pageId: string, messages: ChatMessage[]) => {
       changeCount: m.changeCount,
       reverted: m.reverted,
       modelLabel: m.modelLabel,
+      photoCredits: m.photoCredits,
     }));
-    localStorage.setItem(storageKey(pageId), JSON.stringify(slim));
+    localStorage.setItem(chatStorageKey(pageId), JSON.stringify(slim));
   } catch {
     // Storage can be full or blocked; the chat still works without it.
   }
@@ -86,11 +88,12 @@ const toHistory = (messages: ChatMessage[]): AiChatTurn[] => {
   return turns.slice(-20);
 };
 
-export function useAiChat() {
+export function useAiChat({ onAutoStart }: { onAutoStart?: () => void } = {}) {
   const { state, dispatch } = useEditor();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const playerRef = useRef<BuildPlayer | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const messagesRef = useRef(messages);
@@ -159,7 +162,13 @@ export function useAiChat() {
   }, [messages, state.editor.elements]);
 
   // Stop a running request when the editor unmounts.
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      playerRef.current?.dispose();
+    },
+    []
+  );
 
   const updateMessage = (id: string, fn: (m: ChatMessage) => ChatMessage) =>
     setMessages((ms) => ms.map((m) => (m.id === id ? fn(m) : m)));
@@ -175,6 +184,8 @@ export function useAiChat() {
       const replyId = v4();
       let applied = 0;
       let finished = false;
+      // Shown once the canvas has caught up with the stream.
+      let showOutcome: (() => void) | undefined;
 
       setMessages((ms) => [
         ...ms,
@@ -184,40 +195,50 @@ export function useAiChat() {
       setBusy(true);
       const controller = new AbortController();
       abortRef.current = controller;
+      const player = new BuildPlayer({
+        dispatch,
+        historyKey,
+        getElements: () => stateRef.current.editor.elements,
+      });
+      playerRef.current = player;
 
       const handle = (event: AiStreamEvent) => {
         if (event.type === "operations") {
-          dispatch({
-            type: "APPLY_OPERATIONS",
-            payload: { operations: event.operations, historyKey },
-          });
           applied += event.operations.length;
-          if (event.status) {
-            updateMessage(replyId, (m) => ({
-              ...m,
-              steps: [...(m.steps || []), event.status!],
-            }));
-          }
+          const { status } = event;
+          player.play(
+            event.operations,
+            status
+              ? () =>
+                  updateMessage(replyId, (m) => ({
+                    ...m,
+                    steps: [...(m.steps || []), status],
+                  }))
+              : undefined
+          );
         } else if (event.type === "done") {
           finished = true;
           const label = providersRef.current.find((p) => p.id === event.provider)?.label;
-          updateMessage(replyId, (m) => ({
-            ...m,
-            modelLabel: event.model ? [label, event.model].filter(Boolean).join(" · ") : undefined,
-            content: event.message,
-            status: "done",
-            changeCount: applied,
-            awaitingCapture: applied > 0,
-          }));
+          showOutcome = () =>
+            updateMessage(replyId, (m) => ({
+              ...m,
+              modelLabel: event.model ? [label, event.model].filter(Boolean).join(" · ") : undefined,
+              photoCredits: event.photoCredits,
+              content: event.message,
+              status: "done",
+              changeCount: applied,
+              awaitingCapture: applied > 0,
+            }));
         } else if (event.type === "error") {
           finished = true;
-          updateMessage(replyId, (m) => ({
-            ...m,
-            content: event.message,
-            status: "error",
-            changeCount: applied,
-            awaitingCapture: applied > 0,
-          }));
+          showOutcome = () =>
+            updateMessage(replyId, (m) => ({
+              ...m,
+              content: event.message,
+              status: "error",
+              changeCount: applied,
+              awaitingCapture: applied > 0,
+            }));
         }
       };
 
@@ -256,20 +277,27 @@ export function useAiChat() {
         }
         if (!finished) throw new Error("The connection closed before the AI finished.");
       } catch (error) {
-        if (finished) return;
-        const aborted = controller.signal.aborted;
-        updateMessage(replyId, (m) => ({
-          ...m,
-          content: aborted
-            ? "Stopped."
-            : error instanceof Error
-              ? error.message
-              : "Something went wrong.",
-          status: aborted ? "stopped" : "error",
-          changeCount: applied,
-          awaitingCapture: applied > 0,
-        }));
+        if (!finished) {
+          const aborted = controller.signal.aborted;
+          showOutcome = () =>
+            updateMessage(replyId, (m) => ({
+              ...m,
+              content: aborted
+                ? "Stopped."
+                : error instanceof Error
+                  ? error.message
+                  : "Something went wrong.",
+              status: aborted ? "stopped" : "error",
+              changeCount: applied,
+              awaitingCapture: applied > 0,
+            }));
+        }
       } finally {
+        // Stays busy until the canvas has caught up, so the next request starts
+        // from the finished page.
+        player.finish(showOutcome);
+        await player.finished;
+        playerRef.current = null;
         abortRef.current = null;
         setBusy(false);
       }
@@ -277,7 +305,26 @@ export function useAiChat() {
     [dispatch]
   );
 
-  const stop = useCallback(() => abortRef.current?.abort(), []);
+  // Run the description from the "new page" dialog once the provider list is in,
+  // which also means the page has loaded.
+  const providersLoaded = providers.length > 0;
+  useEffect(() => {
+    if (!pageId || !providersLoaded) return;
+    const initialPrompt = takeInitialAiPrompt(pageId);
+    if (!initialPrompt) return;
+    onAutoStart?.();
+    send(initialPrompt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageId, providersLoaded, send]);
+
+  // Everything already received goes straight onto the page, so a stop never
+  // leaves a half-built section.
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    playerRef.current?.skip();
+  }, []);
+
+  const skipAnimation = useCallback(() => playerRef.current?.skip(), []);
 
   /** Undo a run, only while it is still the most recent change to the page. */
   const undo = useCallback(
@@ -303,6 +350,8 @@ export function useAiChat() {
     setProvider,
     send,
     stop,
+    skipAnimation,
+    animating: state.editor.building,
     undo,
     clear,
     canUndo: (m: ChatMessage) =>

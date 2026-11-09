@@ -3,6 +3,7 @@ import json
 import pytest
 
 from app.ai import providers as registry
+from app.ai.operations import walk
 from app.ai.providers.base import Conversation, Provider, ProviderError, Step, ToolCall
 
 from .conftest import body_with
@@ -40,7 +41,7 @@ class FakeProvider(Provider):
         return True
 
     def start(self, *, system, tools, history, user_message):
-        assert "add_block" in [t.name for t in tools] and "design assistant" in system
+        assert "add_section" in [t.name for t in tools] and "design assistant" in system
         self.conversation = ScriptedConversation(self.script, user_message, history)
         return self.conversation
 
@@ -65,7 +66,7 @@ PAGE = body_with({"id": "abc123-x", "name": "Heading", "type": "heading", "style
 def test_streams_operations_then_done(client, fake):
     provider = fake([
         Step(tool_calls=[
-            ToolCall("1", "add_block", {"kind": "cta"}),
+            ToolCall("1", "add_section", {"kind": "cta", "heading": "Ready?"}),
             ToolCall("2", "update_styles", {"ids": ["zzzzzz"], "styles": [{"property": "color", "value": "red"}]}),
         ]),
         Step(text="Added a call to action."),
@@ -86,6 +87,28 @@ def test_streams_operations_then_done(client, fake):
     assert [t.role for t in conv.history] == ["user", "assistant"]  # leading assistant turn dropped
     errors = [r for r in conv.results[0] if r.is_error]
     assert len(errors) == 1 and "does not exist" in errors[0].content
+
+
+def test_builds_a_whole_page_section_by_section(client, fake):
+    page = body_with({"id": "old1", "name": "Old", "type": "heading", "styles": {}, "content": {"innerText": "Old"}})
+    fake([
+        Step(tool_calls=[
+            ToolCall("1", "start_page", {
+                "accent": "#b45309", "background": "#fffbeb", "surface": "#ffffff", "text": "#292524", "muted": "#78716c",
+                "heading_font": "Playfair Display", "body_font": "Inter", "corners": "soft", "replace_existing": True,
+            }),
+            ToolCall("2", "add_section", {"kind": "navbar", "heading": "Ember"}),
+        ]),
+        Step(tool_calls=[ToolCall("3", "add_section", {"kind": "hero", "heading": "Roasted slowly"})]),
+        Step(text="Built your page."),
+    ])
+    got = events(client.post("/api/ai", json={"prompt": "coffee site", "elements": page, "provider": "fake"}))
+    assert [e["type"] for e in got] == ["operations", "operations", "operations", "done"]
+    assert [e.get("status") for e in got[:3]] == ["Set up the page design", "Added Navbar section", "Added Hero section"]
+    assert [op["op"] for op in got[0]["operations"]] == ["delete", "update_styles"]
+    # A later section uses the design chosen earlier in the run.
+    hero_heading = next(el for el in walk([got[2]["operations"][0]["element"]]) if el["type"] == "heading")
+    assert hero_heading["styles"]["fontFamily"] == "'Playfair Display', serif"
 
 
 def test_refusal_and_provider_errors(client, fake):

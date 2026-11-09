@@ -25,6 +25,8 @@ export const ImageComponent = ({ element }: Props) => {
         className={clsx("block w-full", hasFixedHeight(element) && "h-full")}
         style={{
           objectFit: element.styles.objectFit || "cover",
+          // Crops the photo to the frame instead of growing it to the photo's shape.
+          aspectRatio: element.styles.aspectRatio,
           borderRadius: "inherit",
         }}
       />
